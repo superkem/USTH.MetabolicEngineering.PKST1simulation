@@ -1,0 +1,2230 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Assembly Line Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout concept: a bench. Domain palette (one coloured area per BGC class) on the left,
+   the assembly line + discrete-enzyme lane on top, the live structure on a white drawing board below. */
+:root{
+  --bg:#0e1621; --panel:#131f2e; --panel2:#182638; --line:#26384f; --ink:#f3f6fa; --mute:#9fb0c4;
+  --acc:#22c55e; --acc-ink:#04210f; --err:#ef6a6a; --warn:#f0b429; --ok:#34d399;
+  --cis:#4aa3f0; --trans:#a883f0; --nrps:#f0a43a; --rel:#8fa3ba;
+  --hover:#1d2f45; --shadow:0 8px 24px rgba(0,0,0,.35);
+  --f-display:"Bricolage Grotesque","IBM Plex Sans",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#edf1f6; --panel:#ffffff; --panel2:#f3f6fa; --line:#d3dce8; --ink:#14202e; --mute:#56677c;
+    --acc:#15803d; --acc-ink:#ffffff; --err:#c93a3a; --warn:#a86b00; --ok:#0b8a5f;
+    --cis:#1f74c4; --trans:#7c4dcc; --nrps:#bd6f08; --rel:#5f7490; --hover:#e6edf6; --shadow:0 8px 24px rgba(20,32,46,.15);
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#edf1f6; --panel:#ffffff; --panel2:#f3f6fa; --line:#d3dce8; --ink:#14202e; --mute:#56677c;
+  --acc:#15803d; --acc-ink:#ffffff; --err:#c93a3a; --warn:#a86b00; --ok:#0b8a5f;
+  --cis:#1f74c4; --trans:#7c4dcc; --nrps:#bd6f08; --rel:#5f7490; --hover:#e6edf6; --shadow:0 8px 24px rgba(20,32,46,.15);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body)}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+#app{height:100%;display:flex;flex-direction:column;gap:10px;padding:10px 16px}
+.top{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;min-width:0;margin-right:auto}
+.brand h1{margin:0;font:700 clamp(18px,2.2vw,26px)/1.1 var(--f-display);letter-spacing:-.2px}
+.brand p{margin:2px 0 0;color:var(--mute);font-size:12.5px;max-width:70ch}
+.tb{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:6px 11px;font-weight:500;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.btn:hover:not(:disabled){background:var(--hover)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.pri{background:var(--acc);color:var(--acc-ink);border-color:transparent;font-weight:600}
+.btn.pri:hover:not(:disabled){filter:brightness(1.08);background:var(--acc)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:var(--panel2);padding:6px 10px;font-weight:600;font-size:12px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.chk{display:inline-flex;gap:6px;align-items:center;color:var(--mute);font-size:12.5px}
+.main{flex:1;min-height:0;display:grid;grid-template-columns:292px minmax(0,1fr);gap:12px}
+/* ---------- palette ---------- */
+#palette{min-height:0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:10px;position:relative}
+.palscroll{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:2px}
+#palette.trash{outline:2px dashed var(--err);outline-offset:-4px}
+#palette.trash::after{content:attr(data-trash);position:absolute;inset:auto 10px 10px 10px;background:var(--err);color:#fff;border-radius:10px;padding:8px;text-align:center;font-weight:600;z-index:3}
+.sec{border:1.5px solid var(--cc);border-radius:12px;padding:8px 8px 10px;background:linear-gradient(180deg,color-mix(in srgb,var(--cc) 11%,transparent),transparent 70%)}
+.sec h3{margin:0;font:600 13px var(--f-display);display:flex;align-items:center;gap:7px}
+.sec h3 i{width:10px;height:10px;border-radius:50%;background:var(--cc);flex:none}
+.sec p{margin:2px 0 8px;color:var(--mute);font-size:11.5px;line-height:1.3}
+.chips{display:flex;flex-wrap:wrap;gap:8px 6px}
+.chip,.pc,.mh,.gap,#boardWrap,.sec h3,.sec p{user-select:none;-webkit-user-select:none}
+.chip{display:flex;flex-direction:column;align-items:center;gap:3px;width:61px;cursor:grab;touch-action:pan-y;border-radius:8px;padding:2px 0;background:none;border:0}
+.chip:hover{background:var(--hover)}
+.chip small{font-size:10px;color:var(--mute);text-align:center;line-height:1.1}
+.cls-cis{--cc:var(--cis)} .cls-trans{--cc:var(--trans)} .cls-nrps{--cc:var(--nrps)} .cls-rel{--cc:var(--rel)}
+#info{flex:none;max-height:42%;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:9px 10px;background:var(--panel2);font-size:12.5px;line-height:1.45}
+.chip .arm{display:none}
+#info b{font-family:var(--f-display)}
+#info .tag{font:600 10.5px var(--f-mono);color:var(--cc,var(--mute));text-transform:uppercase;letter-spacing:.06em}
+/* ---------- domain pieces ---------- */
+.dom{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:600 12.5px var(--f-mono);color:#1d2530;background:var(--dc,#ddd);border:3px solid var(--cc,var(--rel));position:relative;user-select:none;-webkit-user-select:none;flex:none;cursor:grab}
+.dom.box{border-radius:11px}
+.dom.wide{width:auto;min-width:66px;padding:0 9px;border-style:dashed;white-space:nowrap}
+.k-KS{--dc:#dba9ac}.k-KSQ{--dc:#e7b8a2}.k-AT{--dc:#d3ddcf}.k-ACP{--dc:#fbc98e}.k-KR{--dc:#a9d3d8}.k-KR0{--dc:#dde1e1}.k-DH{--dc:#c9bfe0}.k-ER{--dc:#f3dc9a}
+.k-MT{--dc:#9fd3a0}.k-GTP{--dc:#e3d6b5}.k-tAT{--dc:#ffffff}.k-A{--dc:#d3ddcf}.k-T{--dc:#fbc98e}.k-C{--dc:#d9aeb0}.k-Cy{--dc:#a5cfc9}.k-TE{--dc:#b3b3dd}
+.k-KR0 span{text-decoration:line-through;text-decoration-thickness:1.5px}
+.dom .x{position:absolute;top:-9px;right:-9px;width:19px;height:19px;border-radius:50%;border:0;background:var(--err);color:#fff;font-size:12px;line-height:19px;padding:0;display:none}
+.pc:hover .x,.pc:focus-within .x{display:block}
+.pc{display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;touch-action:none}
+.pc.ghosted{opacity:.3}
+.pc.ins-before::before{content:"";position:absolute;left:-6px;top:0;height:44px;width:3px;background:var(--acc);border-radius:2px}
+.mdom.ins-end::after{content:"";width:3px;height:44px;background:var(--acc);border-radius:2px;flex:none}
+.arm{position:absolute;left:50%;top:41px;transform:translateX(-50%);pointer-events:none}
+.arm text{font:600 8px var(--f-mono);fill:var(--mute)}
+select.opt{background:var(--panel);border:1px solid var(--line);border-radius:7px;font-size:11px;padding:2px 3px;max-width:118px;touch-action:auto}
+select.opt option,select.opt optgroup{background:var(--panel);color:var(--ink)}
+/* ---------- assembly line ---------- */
+#boardWrap{flex:none;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 12px 14px}
+#board{position:relative;width:max-content;min-width:100%;padding-right:14px}
+#line{display:flex;align-items:stretch;gap:0}
+.gap{display:flex;align-items:center;justify-content:center;width:26px;flex:none;border-radius:10px;color:var(--mute);font-size:18px;transition:width .12s}
+.gap.last{width:132px;border:1.5px dashed var(--line);margin-left:4px;font-size:12px;text-align:center;padding:0 8px;line-height:1.3}
+.gap.drop-ok{width:70px;background:color-mix(in srgb,var(--acc) 22%,transparent);color:var(--ink)}
+.gap.last.drop-ok{width:132px}
+.mod{background:var(--panel2);border:1px solid var(--line);border-radius:12px;min-width:150px;display:flex;flex-direction:column;flex:none}
+.mod.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.mod.cm{border-left:6px solid var(--mc);background:color-mix(in srgb,var(--mc) 9%,var(--panel2))}
+.mod.cm:hover{box-shadow:0 0 0 2px var(--mc)}
+.mod.drop-ok{outline:2px dashed var(--acc)}
+.mod.drop-bad{outline:2px dashed var(--err)}
+.mh{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line);font:600 12px var(--f-display)}
+.mh .nm{border:0;background:none;font:inherit;padding:2px 4px;border-radius:6px;display:flex;gap:6px;align-items:center}
+.mh .nm:hover{background:var(--hover)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex:none}
+.dot.warn{background:var(--warn)}.dot.err{background:var(--err)}.dot.skip,.dot.empty{background:var(--line)}
+.mh .sp{margin-left:auto;display:flex;gap:2px;align-items:center}
+.ib{border:0;background:none;color:var(--mute);border-radius:6px;padding:1px 5px;font-size:13px;line-height:18px}
+.ib:hover{background:var(--hover);color:var(--ink)}
+.iter{display:inline-flex;align-items:center;gap:2px;font:600 11px var(--f-body);color:var(--nrps)}
+.mdom{display:flex;gap:9px;padding:12px 10px 8px;position:relative;min-height:92px;align-items:flex-start}
+.mdom::before{content:"";position:absolute;left:6px;right:6px;top:34px;height:3px;border-radius:2px;background:var(--line)}
+.mdom .pc,.mdom .ph{position:relative;z-index:1}
+.ph{color:var(--mute);font-size:11.5px;align-self:center;padding:0 6px;text-align:center;max-width:120px;line-height:1.3}
+.mf{padding:0 8px 8px;display:flex;gap:4px;flex-wrap:wrap;font:500 10.5px var(--f-mono)}
+.pill{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:1px 7px;color:var(--mute);white-space:nowrap}
+.pill.hl{color:var(--ink)}
+.mf select{font-size:10.5px}
+#lane{margin-top:26px;border:1.5px dashed var(--trans);border-radius:12px;padding:8px 10px;display:flex;gap:10px;align-items:center;min-height:84px;position:relative}
+#lane.drop-ok{background:color-mix(in srgb,var(--acc) 14%,transparent);border-color:var(--acc)}
+#lane.drop-bad{border-color:var(--err)}
+#lane .lt{position:absolute;top:-10px;right:14px;background:var(--panel);padding:0 6px;font:600 11.5px var(--f-display);color:var(--trans)}
+#lane .lh{color:var(--mute);font-size:12px}
+#links{position:absolute;inset:0;pointer-events:none;overflow:visible}
+#links path{fill:none;stroke:var(--trans);stroke-width:1.6;stroke-dasharray:5 4;opacity:.9}
+#links circle{fill:var(--trans)}
+/* ---------- viewer ---------- */
+#viewer{flex:1 0 auto;min-height:380px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px 12px;display:flex;flex-direction:column;gap:9px}
+.vtabs{display:flex;gap:4px;overflow:auto;padding-bottom:2px}
+.vtabs button{border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:4px 10px;font:600 12px var(--f-mono);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.vtabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.vtabs button:disabled{opacity:.4;cursor:default}
+.vbody{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:12px}
+.cwrap{display:flex;flex-direction:column;gap:6px;min-width:0}
+#canvas{background:#fff;border-radius:12px;min-height:290px;flex:1;overflow:auto;display:grid;place-items:center;padding:10px;color:#1c2430}
+#canvas svg{display:block;height:auto}
+#canvas .empty{color:#6b7787;text-align:center;max-width:36ch}
+.legend{display:flex;gap:6px 14px;flex-wrap:wrap;color:var(--mute);font-size:11.5px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.vside{display:flex;flex-direction:column;gap:9px;min-width:0;overflow:auto}
+.card{border:1px solid var(--line);border-radius:12px;padding:9px 11px;background:var(--panel2)}
+.card h4{margin:0 0 5px;font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.07em;color:var(--mute)}
+.formula{font:600 22px/1.1 var(--f-mono);letter-spacing:-.3px}
+.formula sub{font-size:.62em}
+.kv{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:2px 0}
+.kv span:first-child{color:var(--mute)}
+.kv span:last-child{font-family:var(--f-mono);font-weight:500;text-align:right}
+.match{margin-top:7px;padding:6px 8px;border-radius:8px;background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ink);font-size:12.5px}
+.issue{display:flex;gap:7px;font-size:12.5px;padding:4px 0;border-top:1px solid var(--line);cursor:pointer;align-items:flex-start}
+.issue:first-of-type{border-top:0}
+.issue b{font:600 10.5px var(--f-mono);border-radius:5px;padding:1px 5px;flex:none;margin-top:1px;color:#fff}
+.issue.err b{background:var(--err)}.issue.warn b{background:var(--warn);color:#1b1500}.issue.info b{background:var(--rel)}
+.log{margin:0;padding:0;list-style:none;font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.log li.mh2{font:600 11.5px var(--f-mono);color:var(--mute);margin-top:4px}
+.ok-line{color:var(--ok);font-size:12.5px}
+/* ---------- drawer ---------- */
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,100%);background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--shadow);z-index:30;padding:14px 16px;overflow:auto;transform:translateX(105%);transition:transform .18s;display:flex;flex-direction:column;gap:10px}
+#drawer.on{transform:none}
+#drawer h2{margin:0;font:700 18px var(--f-display)}
+.tg{border:1px solid var(--line);border-radius:12px;padding:9px 11px;background:var(--panel2);display:flex;flex-direction:column;gap:5px}
+.tg .r1{display:flex;gap:8px;align-items:center}
+.tg .r1 b{font:600 14px var(--f-display);margin-right:auto}
+.tg code{font:500 12px var(--f-mono);color:var(--mute)}
+.tg p{margin:0;font-size:12.5px;color:var(--mute)}
+.tg .st{font:600 11px var(--f-mono);color:var(--ok)}
+#toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--ink);color:var(--bg);border-radius:10px;padding:8px 14px;font-weight:500;z-index:50;box-shadow:var(--shadow);max-width:min(90vw,520px)}
+#ghost{position:fixed;z-index:60;pointer-events:none;opacity:.92;transform:translate(-50%,-50%);filter:drop-shadow(0 6px 10px rgba(0,0,0,.4))}
+@media (max-width:1180px){.vbody{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:900px){
+  html,body{height:auto}
+  #app{height:auto}
+  .main{grid-template-columns:minmax(0,1fr)}
+  #palette{max-height:300px}
+  #viewer{min-height:0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+[hidden]{display:none!important}
+/* ---------- structure -> line panel ---------- */
+#pdrawer{position:fixed;top:0;right:0;bottom:0;width:min(960px,100%);background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--shadow);z-index:32;padding:14px 16px 24px;overflow:auto;transform:translateX(105%);transition:transform .18s;display:flex;flex-direction:column;gap:10px}
+#pdrawer.on{transform:none}
+#pdrawer h2{margin:0;font:700 18px var(--f-display)}
+#pdrawer h4{margin:0 0 5px;font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.07em;color:var(--mute)}
+.pdhint{margin:0;color:var(--mute);font-size:12.5px;max-width:80ch}
+#pdta{width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:500 13px/1.4 var(--f-mono);resize:vertical}
+.pdex{display:flex;gap:6px;flex-wrap:wrap;align-items:center;color:var(--mute);font-size:12.5px}
+.btn.sm{padding:3px 9px;font-size:12.5px}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.edtools{display:flex;gap:6px;flex-wrap:wrap}
+.edbox{background:#fff;border-radius:12px;border:1px solid var(--line);overflow:hidden;cursor:crosshair;user-select:none;-webkit-user-select:none}
+.edbox .ahit{fill:transparent;cursor:pointer}.edbox .ahit:hover,.edbox .ahit.on{fill:rgba(47,143,95,.28)}
+.edbox .bhit:hover{stroke:rgba(47,143,95,.25)}
+.edinfo{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--mute)}
+.edinfo code,.pdkv code{font:500 12.5px var(--f-mono);color:var(--ink);word-break:break-all}
+.pdopts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)}
+.pdopts .lbl{color:var(--mute);font-size:12.5px}
+.pdbanner{border-radius:10px;padding:9px 12px;font-size:13px;border:1px solid var(--line)}
+.pdbanner.ok{background:color-mix(in srgb,var(--ok) 16%,transparent);border-color:var(--ok)}
+.pdbanner.warn{background:color-mix(in srgb,var(--warn) 16%,transparent);border-color:var(--warn)}
+.pdbanner.err{background:color-mix(in srgb,var(--err) 14%,transparent);border-color:var(--err)}
+.pdgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
+@media (max-width:760px){.pdgrid{grid-template-columns:minmax(0,1fr)}}
+.pdcol{display:flex;flex-direction:column;gap:8px;min-width:0}
+.pdcanvas{background:#fff;border-radius:12px;padding:8px;overflow:auto;display:grid;place-items:center;color:#1c2430}
+.pdkv{display:flex;gap:8px;justify-content:space-between;align-items:baseline;font-size:12.5px;color:var(--mute)}
+.pdnote{font-size:12.5px;color:var(--mute)}
+.pdmod{border:1px solid var(--line);border-radius:12px;background:var(--panel2);padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.pdmh{display:flex;gap:8px;align-items:baseline;font:600 12.5px var(--f-display)}
+.pdmh span{color:var(--mute);font-weight:500}
+.pdchips{display:flex;gap:8px 8px;flex-wrap:wrap;align-items:flex-start}
+.pdchip{display:flex;flex-direction:column;align-items:center;gap:2px;user-select:none}
+.pdchip .dom{cursor:default;width:38px;height:38px;font-size:11.5px}
+.pdchip .dom.wide{width:auto}
+.pdchip small{font-size:10px;color:var(--mute);max-width:70px;text-align:center;line-height:1.1}
+.iterb{align-self:center;font:600 12px var(--f-mono);color:var(--nrps)}
+.pdmod ul,.pdnotes ul{margin:0;padding-left:18px;font-size:12.5px;display:flex;flex-direction:column;gap:2px}
+.pdnotes{border-top:1px solid var(--line);padding-top:8px;color:var(--mute)}
+.pdact{display:flex;gap:8px}
+#pdrawer>*{flex:none}
+.pdchip .arm{display:none}
+.pdcanvas svg{min-width:0!important;max-width:100%!important;height:auto}
+#pdrawer>.seg,#pdrawer .edtools{align-self:flex-start}
+.pdgrid{margin-top:4px}
+
+.pdmod{border-left:6px solid var(--mc,var(--line));background:color-mix(in srgb,var(--mc,transparent) 10%,var(--panel2));cursor:pointer;transition:box-shadow .12s}
+.pdmod:hover,.pdmod.on{box-shadow:0 0 0 2px var(--mc)}
+
+/* ---------- practice tab ---------- */
+#mainTabs button{font-weight:600}
+#prac{position:fixed;top:0;right:0;bottom:0;width:388px;z-index:40;background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--shadow);padding:12px 14px 20px;overflow:auto;display:none;flex-direction:column;gap:10px}
+body.prac #prac{display:flex}
+#prac>*{flex:none}
+body.prac #app{padding-right:404px}
+body.prac #drawer{right:388px;width:min(420px,calc(100% - 388px))}
+body.prac #pdrawer{right:388px;width:min(960px,calc(100% - 388px))}
+body.prac #drawer:not(.on),body.prac #pdrawer:not(.on){visibility:hidden}
+.prhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.prhead h2{margin:0;font:700 18px var(--f-display)}
+.prhint{margin:0;color:var(--mute);font-size:12.5px}
+.prgate{display:flex;gap:8px}
+.prgate input{flex:1;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:7px 10px;font:inherit}
+.prerr{color:var(--err);font-size:12.5px}
+.prbar{height:8px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);overflow:hidden}
+.prbar i{display:block;height:100%;background:var(--acc);transition:width .2s}
+.prcount{font:600 11px var(--f-mono);color:var(--mute)}
+.prtask{border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
+.prtask>summary{display:flex;gap:8px;align-items:center;padding:8px 10px;cursor:pointer;list-style:none}
+.prtask>summary::-webkit-details-marker{display:none}
+.prtask>summary b{font:600 13px var(--f-display);margin-right:auto}
+.prmin{font:500 11px var(--f-mono);color:var(--mute)}
+.prmark{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;font-size:12px;color:#fff;flex:none}
+.prtask.done .prmark{background:var(--ok);border-color:var(--ok)}
+.prbody{padding:2px 12px 12px;display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+.prbody ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.prgoal{margin:0;color:var(--mute)}
+.prq{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.prq select{max-width:150px}
+.pract{display:flex}
+.prfb{font-size:12.5px;border-radius:8px;padding:0}
+.prfb.ok,.prfb.no{padding:6px 8px}
+.prfb.ok{background:color-mix(in srgb,var(--ok) 18%,transparent)}
+.prfb.no{background:color-mix(in srgb,var(--warn) 18%,transparent)}
+.prx summary{cursor:pointer;color:var(--mute);font-size:12px}
+.prx p{margin:4px 0 0;font-size:12.5px}
+@media (max-width:900px){
+  body.prac #app{padding-right:16px;padding-bottom:58vh}
+  #prac{top:auto;left:0;width:auto;height:56vh;border-left:0;border-top:1px solid var(--line)}
+  body.prac #drawer,body.prac #pdrawer{right:0;width:100%;bottom:56vh}
+}
+
+.lockbar{position:sticky;top:-12px;z-index:3;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:color-mix(in srgb,var(--warn) 16%,var(--panel));border:1px solid var(--warn);border-radius:10px;padding:7px 10px;font-size:12.5px}
+.lockbar.open{background:color-mix(in srgb,var(--ok) 16%,var(--panel));border-color:var(--ok)}
+.lockbar input{width:130px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font:inherit}
+.prthink{margin:0}
+.pransw{border:1px dashed var(--ok);border-radius:8px;padding:6px 8px;display:flex;flex-direction:column;gap:6px}
+.pransw p{margin:0}
+
+</style>
+
+<div id="app">
+  <header class="top">
+    <div class="brand">
+      <h1 data-i="title">Assembly Line Sandbox</h1>
+      <p data-i="sub"></p>
+    </div>
+    <div class="tb">
+      <div class="seg" id="mainTabs" role="group" aria-label="Mode"><button id="tabSb" aria-pressed="true">Sandbox</button><button id="tabPr" aria-pressed="false">Step by step examples</button><button id="tabFr" aria-pressed="false">Practice</button></div>
+      <button class="btn pri" id="bPred" data-i="predict"></button>
+      <button class="btn" id="bEx" data-i="examples"></button>
+      <button class="btn" id="bUndo" data-i="undo"></button>
+      <button class="btn" id="bRedo" data-i="redo"></button>
+      <button class="btn" id="bClear" data-i="clear"></button>
+      <label class="chk"><input type="checkbox" id="cNum"><span data-i="numbers"></span></label>
+      <div class="seg" role="group" aria-label="Language"><button id="lEn" aria-pressed="true">EN</button><button id="lVi" aria-pressed="false">VI</button></div>
+    </div>
+  </header>
+  <div class="main">
+    <aside id="palette" aria-label="Domain palette"></aside>
+    <section id="work" style="min-height:0;display:flex;flex-direction:column;gap:12px;overflow:auto;min-width:0">
+      <div id="boardWrap"><div id="board"></div></div>
+      <div id="viewer">
+        <div class="vtabs" id="vtabs" role="tablist"></div>
+        <div class="vbody">
+          <div class="cwrap"><div id="canvas"></div><div class="legend" id="legend"></div>
+            <div class="tb"><button class="btn" id="bCopy" data-i="copySvg"></button></div></div>
+          <div class="vside" id="vside"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+<aside id="pdrawer" aria-label="Structure to assembly line"></aside>
+<aside id="prac" aria-label="Practice"></aside>
+
+<aside id="drawer" aria-label="Examples and targets"></aside>
+<div id="ghost" hidden></div>
+<div id="toast" hidden></div>
+
+<script>
+(()=>{
+'use strict';
+/* ====================================================================
+   helpers + i18n
+   ==================================================================== */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const el=(tag,attrs={},...kids)=>{const e=document.createElement(tag);
+  for(const k in attrs){const v=attrs[k];if(v==null||v===false)continue;
+    if(k==='class')e.className=v;else if(k==='html')e.innerHTML=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v===true?'':v);}
+  kids.flat().forEach(c=>{if(c==null||c===false)return;e.append(c.nodeType?c:document.createTextNode(c))});return e;};
+let lang='en';
+const L=o=>typeof o==='string'?o:(o[lang]||o.en);
+
+const UI={
+en:{
+ title:'Assembly Line Sandbox',
+ sub:'Drag domains into modules to build a PKS or NRPS assembly line. The product structure redraws after every change.',
+ examples:'Examples & targets',undo:'Undo',redo:'Redo',clear:'Clear all',numbers:'Number carbons',
+ copySvg:'Copy SVG',saveSvg:'Save SVG',copied:'SVG copied',saveFail:'Copying is blocked here; select the structure and use your browser instead.',
+ dropHere:'Drop a domain here',newMod:'Drop here for a new module',lane:'Discrete enzymes (act in trans)',
+ laneHint:'Drop a trans-AT protein here. It loads malonyl-type units onto every module that has no AT of its own.',
+ trash:'Drop here to remove',finalP:'Final product',afterM:'After',
+ formula:'Formula',mass:'Mass (average)',kind:'Line type',ring:'Ring',blocks:'Building blocks',issues:'Check',noIssues:'No problems found.',
+ steps:'What happens',legend1:'Colour = which module made the atom (hover a module to isolate it)',legend2:'Red Me = SAM methyl',legend3:'Shaded circle = change made by the selected module',
+ starter:'Starter',loading:'Loading',release:'Release',module:'Module',bound:'Still bound to the enzyme (no TE). Shown as the free acid.',
+ asAcid:'formula given as the free acid',empty:'Add domains to the assembly line to see a structure.',
+ broken:'The line is broken. Showing the last intermediate before the error.',
+ matches:'Matches the formula of',solved:'Solved',load:'Load example',targets:'Targets',targetsHint:'Build these yourself, or load a worked example. A target turns green when your product has the right formula and ring.',
+ close:'Close',addMod:'Add module',moveL:'Move left',moveR:'Move right',delMod:'Delete module',remove:'Remove domain',
+ mode:'Release',hydro:'Hydrolysis (acid)',cyc:'Cyclisation',auto:'auto (farthest)',iter:'Repeat the module (iterative PKS)',
+ loadedBy:'Loaded by',tAtN:'trans-AT',beta:'β-carbon',
+ hint:'Hover a domain to read what it does. Drag it onto a module or click it to add it to the selected module.',
+ aaLabel:'Amino acid',subLabel:'Substrate',
+ nCO2:'CO₂ released',nNADPH:'NADPH used',nSAM:'SAM used',nATP:'ATP used (A domains)',nCoA:'Acyl-CoA loaded',
+ kStart:'Starter',kExt:'Extenders',kRes:'Residues',
+ grpS:'Starters',grpE:'Extenders',
+ k_cis:'cis-AT PKS',k_trans:'trans-AT PKS',k_nrps:'NRPS',k_hyb:'PKS–NRPS hybrid',k_none:'no assembly line yet',k_mixed:'PKS with cis and trans AT',k_it:'iterative',
+ oh_ketone:'ketone',oh_oh:'hydroxyl',oh_ene:'C=C',oh_ch2:'CH₂'
+},
+vi:{
+ title:'Sandbox dây chuyền lắp ráp',
+ sub:'Kéo thả domain vào module để xây dựng dây chuyền PKS hoặc NRPS. Cấu trúc sản phẩm được vẽ lại sau mỗi thay đổi.',
+ examples:'Ví dụ & mục tiêu',undo:'Hoàn tác',redo:'Làm lại',clear:'Xóa hết',numbers:'Đánh số carbon',
+ copySvg:'Sao chép SVG',saveSvg:'Lưu SVG',copied:'Đã sao chép SVG',saveFail:'Ở đây không lưu được tệp; hãy dùng Sao chép SVG.',
+ dropHere:'Thả domain vào đây',newMod:'Thả vào đây để tạo module mới',lane:'Enzyme rời (hoạt động in trans)',
+ laneHint:'Thả protein trans-AT vào đây. Nó nạp đơn vị kiểu malonyl cho mọi module không có AT riêng.',
+ trash:'Thả vào đây để xóa',finalP:'Sản phẩm cuối',afterM:'Sau',
+ formula:'Công thức',mass:'Khối lượng (trung bình)',kind:'Loại dây chuyền',ring:'Vòng',blocks:'Đơn vị xây dựng',issues:'Kiểm tra',noIssues:'Không có vấn đề.',
+ steps:'Điều gì xảy ra',legend1:'Màu = module tạo ra nguyên tử (rê chuột vào module để làm nổi)',legend2:'Me đỏ = nhóm methyl từ SAM',legend3:'Vòng tô màu = thay đổi do module đang chọn',
+ starter:'Starter',loading:'Nạp',release:'Giải phóng',module:'Module',bound:'Chuỗi vẫn gắn trên enzyme (không có TE). Vẽ ở dạng acid tự do.',
+ asAcid:'công thức tính ở dạng acid tự do',empty:'Thêm domain vào dây chuyền để xem cấu trúc.',
+ broken:'Dây chuyền bị đứt. Hiển thị chất trung gian cuối cùng trước lỗi.',
+ matches:'Trùng công thức với',solved:'Đã giải',load:'Nạp ví dụ',targets:'Mục tiêu',targetsHint:'Tự xây dựng các chất này hoặc nạp ví dụ mẫu. Mục tiêu chuyển xanh khi sản phẩm có đúng công thức và vòng.',
+ close:'Đóng',addMod:'Thêm module',moveL:'Dịch sang trái',moveR:'Dịch sang phải',delMod:'Xóa module',remove:'Gỡ domain',
+ mode:'Giải phóng',hydro:'Thủy phân (acid)',cyc:'Đóng vòng',auto:'tự động (xa nhất)',iter:'Lặp lại module (PKS lặp)',
+ loadedBy:'Được nạp bởi',tAtN:'trans-AT',beta:'carbon β',
+ hint:'Di chuột lên domain để đọc chức năng. Kéo domain vào module, hoặc bấm để thêm vào module đang chọn.',
+ aaLabel:'Amino acid',subLabel:'Cơ chất',
+ nCO2:'CO₂ thải ra',nNADPH:'NADPH đã dùng',nSAM:'SAM đã dùng',nATP:'ATP đã dùng (domain A)',nCoA:'Acyl-CoA được nạp',
+ kStart:'Starter',kExt:'Đơn vị kéo dài',kRes:'Gốc amino acid',
+ grpS:'Starter',grpE:'Đơn vị kéo dài',
+ k_cis:'PKS cis-AT',k_trans:'PKS trans-AT',k_nrps:'NRPS',k_hyb:'lai PKS–NRPS',k_none:'chưa có dây chuyền',k_mixed:'PKS có cả AT cis và trans',k_it:'lặp',
+ oh_ketone:'ketone',oh_oh:'hydroxyl',oh_ene:'C=C',oh_ch2:'CH₂'
+}};
+const tr=k=>(UI[lang][k]??UI.en[k]??k);
+
+/* ====================================================================
+   chemistry tables
+   ==================================================================== */
+const CLASSES={
+ cis:{n:{en:'Type I cis-AT PKS',vi:'PKS type I cis-AT'},s:{en:'Every module carries its own AT.',vi:'Mỗi module có AT riêng.'}},
+ trans:{n:{en:'Type I trans-AT PKS',vi:'PKS type I trans-AT'},s:{en:'No AT in the modules; a free-standing AT loads them.',vi:'Module không có AT; AT rời nạp cho tất cả.'}},
+ nrps:{n:{en:'NRPS',vi:'NRPS'},s:{en:'One amino acid per module (C–A–T).',vi:'Mỗi module một amino acid (C–A–T).'}},
+ rel:{n:{en:'Release · all classes',vi:'Giải phóng · mọi lớp'},s:{en:'Ends the line.',vi:'Kết thúc dây chuyền.'}}
+};
+const DT={
+ KSQ:{ab:'KSQ',n:{en:'Decarboxylating KS (KSᵬ)',vi:'KS khử carboxyl (KSQ)'},sn:'KSQ',
+  d:{en:'Loading-module KS. It decarboxylates malonyl-, methylmalonyl- or ethylmalonyl-ACP, so the starter becomes acetyl, propionyl or butyryl (CO₂ lost). Seen in nystatin and pikromycin.',vi:'KS của module nạp. Khử carboxyl malonyl-, methylmalonyl- hoặc ethylmalonyl-ACP nên starter thành acetyl, propionyl hoặc butyryl (mất CO₂). Gặp ở nystatin và pikromycin.'}},
+ KS:{ab:'KS',n:{en:'Ketosynthase',vi:'Ketosynthase'},sn:'KS',
+  d:{en:'Joins the chain to the extender by decarboxylative Claisen condensation. CO₂ is lost, the chain grows by two carbons and a β-ketothioester forms. Needs a chain from the previous module and a loaded ACP.',vi:'Nối chuỗi với đơn vị kéo dài bằng ngưng tụ Claisen khử carboxyl. Mất CO₂, chuỗi dài thêm 2 carbon và tạo β-ketothioester. Cần chuỗi từ module trước và ACP đã được nạp.'}},
+ AT:{ab:'AT',n:{en:'Acyltransferase (cis)',vi:'Acyltransferase (cis)'},sn:'AT',
+  d:{en:'The "decision gate" fused into the module. Its substrate sets the side group: malonyl gives H, methylmalonyl gives Me, ethylmalonyl gives Et. In a loading module it picks the starter.',vi:'"Cổng quyết định" nằm ngay trong module. Cơ chất của AT quyết định nhóm thế: malonyl cho H, methylmalonyl cho Me, ethylmalonyl cho Et. Ở module nạp, AT chọn starter.'}},
+ ACP:{ab:'ACP',n:{en:'Acyl carrier protein',vi:'Protein mang acyl (ACP)'},sn:'ACP',
+  d:{en:'The "taxi". Its phosphopantetheine arm (–SH) carries the starter, the extender and the growing chain between active sites.',vi:'"Taxi". Cánh tay phosphopantetheine (–SH) mang starter, đơn vị kéo dài và chuỗi đang lớn giữa các tâm hoạt động.'}},
+ KR:{ab:'KR',n:{en:'Ketoreductase',vi:'Ketoreductase'},sn:'KR',
+  d:{en:'NADPH reduces the β-ketone (C=O) to a β-hydroxyl (CH–OH). It must act before DH and ER.',vi:'NADPH khử nhóm β-keto (C=O) thành β-hydroxyl (CH–OH). Phải tác động trước DH và ER.'}},
+ KR0:{ab:'KR⁰',n:{en:'Inactive KR (KR⁰)',vi:'KR không hoạt động (KR⁰)'},sn:'KR⁰',
+  d:{en:'Present but inactive, so the β-ketone stays. DEBS module 3 does this and leaves the C9 ketone of 6-dEB.',vi:'Có mặt nhưng không hoạt động nên nhóm β-keto giữ nguyên. Module 3 của DEBS làm vậy và để lại ketone C9 của 6-dEB.'}},
+ DH:{ab:'DH',n:{en:'Dehydratase',vi:'Dehydratase'},sn:'DH',
+  d:{en:'Removes water from the β-hydroxyl and the α-hydrogen, forming a C=C. Needs KR first and an α-hydrogen (a quaternary α-carbon blocks it).',vi:'Loại nước từ β-hydroxyl và H-α, tạo liên kết đôi C=C. Cần KR trước và cần H-α (carbon α bậc bốn sẽ chặn DH).'}},
+ ER:{ab:'ER',n:{en:'Enoylreductase',vi:'Enoylreductase'},sn:'ER',
+  d:{en:'NADPH saturates the C=C so the β-carbon ends as CH₂. Needs KR and DH first.',vi:'NADPH khử liên kết đôi C=C nên carbon β thành CH₂. Cần KR và DH trước.'}},
+ MT:{ab:'MT',n:{en:'C-methyltransferase',vi:'C-methyltransferase'},sn:'MT',
+  d:{en:'SAM donates a methyl to the α-carbon (red Me) after condensation, before KR acts. On an α-carbon that already has Me it gives a gem-dimethyl.',vi:'SAM cho nhóm methyl vào carbon α (Me đỏ) sau ngưng tụ, trước khi KR tác động. Nếu carbon α đã có Me sẽ thành gem-dimethyl.'}},
+ GTP:{ab:'GT/P',n:{en:'GT/P loader',vi:'Bộ nạp GT/P'},sn:'GT/P',
+  d:{en:'Special loader of the fr9 (spliceostatin) trans-AT pathway. It gives a lactyl-type starter derived from 1,3-bisphosphoglycerate onto the loading carrier.',vi:'Bộ nạp đặc biệt của con đường fr9 (spliceostatin) trans-AT. Tạo starter kiểu lactyl từ 1,3-bisphosphoglycerate lên protein mang của module nạp.'}},
+ tAT:{ab:'trans-AT',n:{en:'Free-standing AT (trans)',vi:'AT rời (trans)'},sn:'trans-AT',
+  d:{en:'A separate protein, not part of any module. It docks at every module without its own AT and loads its substrate onto that ACP. Add several if modules need different extenders, then choose which one serves each module.',vi:'Protein riêng, không thuộc module nào. Nó gắn vào mọi module không có AT riêng và nạp cơ chất lên ACP. Thêm nhiều protein nếu các module cần đơn vị kéo dài khác nhau, rồi chọn protein phục vụ từng module.'}},
+ A:{ab:'A',n:{en:'Adenylation domain',vi:'Domain adenyl hóa (A)'},sn:'A',
+  d:{en:'Selects one amino acid in its specificity pocket and activates it with ATP as aminoacyl-AMP, then passes it to T. Choose the amino acid.',vi:'Chọn một amino acid trong túi đặc hiệu và hoạt hóa bằng ATP thành aminoacyl-AMP, rồi chuyển cho T. Hãy chọn amino acid.'}},
+ T:{ab:'T',n:{en:'Thiolation (PCP) domain',vi:'Domain thiol hóa (T/PCP)'},sn:'T',
+  d:{en:'The peptidyl carrier protein. Its phosphopantetheine arm holds the amino acid and the growing peptide as a thioester.',vi:'Protein mang peptidyl. Cánh tay phosphopantetheine giữ amino acid và peptide đang lớn dưới dạng thioester.'}},
+ C:{ab:'C',n:{en:'Condensation domain',vi:'Domain ngưng tụ (C)'},sn:'C',
+  d:{en:'The amine of this module’s amino acid attacks the thioester of the upstream chain and forms an amide (peptide) bond. After a PKS module the upstream chain is a polyketide, which gives a hybrid.',vi:'Nhóm amine của amino acid ở module này tấn công thioester của chuỗi phía trước và tạo liên kết amide (peptide). Sau module PKS, chuỗi phía trước là polyketide nên tạo thành chất lai.'}},
+ Cy:{ab:'Cy',n:{en:'Cyclisation domain',vi:'Domain đóng vòng (Cy)'},sn:'Cy',
+  d:{en:'Forms the peptide bond, then the side chain of a Cys, Ser or Thr attacks the preceding carbonyl and water is lost: a thiazoline (Cys) or oxazoline (Ser/Thr) ring.',vi:'Tạo liên kết peptide, rồi chuỗi bên của Cys, Ser hoặc Thr tấn công carbonyl phía trước và mất nước: tạo vòng thiazoline (Cys) hoặc oxazoline (Ser/Thr).'}},
+ TE:{ab:'TE',n:{en:'Thioesterase',vi:'Thioesterase (TE)'},sn:'TE',
+  d:{en:'Takes the finished chain on its active-site Ser and releases it. Hydrolysis gives the free acid. Cyclisation uses an internal OH (macrolactone, as in 6-dEB) or the N-terminal amine (macrolactam).',vi:'Nhận chuỗi hoàn chỉnh lên Ser ở tâm hoạt động rồi giải phóng. Thủy phân cho acid tự do. Đóng vòng dùng OH nội phân tử (macrolactone, như 6-dEB) hoặc amine đầu N (macrolactam).'}}
+};
+const PAL=[['cis',['KSQ','KS','AT','ACP','KR','KR0','DH','ER','MT']],['trans',['tAT','GTP','KS','ACP','KR','KR0','DH','ER','MT']],['nrps',['A','T','C','Cy']],['rel',['TE']]];
+const WIDE=new Set(['tAT','GTP']), BOX=new Set(['AT','A','tAT','GTP','TE','KSQ']);
+const PKT=['KS','KSQ','AT','KR','KR0','DH','ER','MT','GTP'], NRT=['A','C','Cy'];
+
+const SUB={
+ ace:{k:'s',n:'Acetyl',acid:{C:2,H:4,O:2}}, pro:{k:'s',n:'Propionyl',acid:{C:3,H:6,O:2}}, but:{k:'s',n:'Butyryl',acid:{C:4,H:8,O:2}},
+ iso:{k:'s',n:'Isobutyryl',acid:{C:4,H:8,O:2}}, lac:{k:'s',n:'Lactyl',acid:{C:3,H:6,O:3}},
+ mal:{k:'e',n:'Malonyl',d:{C:2,H:2,O:1},R:[],dec:'ace'},
+ mmal:{k:'e',n:'Methylmalonyl',d:{C:3,H:4,O:1},R:['Me'],dec:'pro'},
+ emal:{k:'e',n:'Ethylmalonyl',d:{C:4,H:6,O:1},R:['Et'],dec:'but'}
+};
+const STARTERS=['ace','pro','but','iso'], EXTENDERS=['mal','mmal','emal'];
+const AA={
+ Gly:{C:2,H:5,N:1,O:2},Ala:{C:3,H:7,N:1,O:2},Val:{C:5,H:11,N:1,O:2},Leu:{C:6,H:13,N:1,O:2},Ile:{C:6,H:13,N:1,O:2},
+ Phe:{C:9,H:11,N:1,O:2},Tyr:{C:9,H:11,N:1,O:3},Ser:{C:3,H:7,N:1,O:3},Thr:{C:4,H:9,N:1,O:3},Cys:{C:3,H:7,N:1,O:2,S:1},
+ Asp:{C:4,H:7,N:1,O:4},Glu:{C:5,H:9,N:1,O:4}
+};
+// side chains: node = [angle, length, label, double, children] ; 'ring' = ['ring', angle, length, paraLabel]
+const SC={
+ Gly:[],Ala:[[0,20,'Me']],
+ Val:[[0,20,null,0,[[-60,20,'Me'],[60,20,'Me']]]],
+ Leu:[[0,20,null,0,[[60,20,null,0,[[-60,20,'Me'],[60,20,'Me']]]]]],
+ Ile:[[0,20,null,0,[[-60,20,'Me'],[60,20,null,0,[[-60,20,'Me']]]]]],
+ Ser:[[0,20,null,0,[[60,20,'OH']]]],
+ Thr:[[0,20,null,0,[[-60,20,'OH'],[60,20,'Me']]]],
+ Cys:[[0,20,null,0,[[60,20,'SH']]]],
+ Asp:[[0,20,null,0,[[60,20,null,0,[[-60,20,'O',1],[60,20,'OH']]]]]],
+ Glu:[[0,20,null,0,[[60,20,null,0,[[-60,20,null,0,[[-60,20,'O',1],[60,20,'OH']]]]]]]],
+ Phe:[[0,20,null,0,[['ring',60,20]]]],
+ Tyr:[[0,20,null,0,[['ring',60,20,'OH']]]]
+};
+const MASS={C:12.011,H:1.008,N:14.007,O:15.999,S:32.06};
+const UCOL=['#1f8acb','#0f9a5c','#17a2a2','#8e5bd0','#d1478f','#c28a00','#6d7f1f','#8a5a2b','#555a9e'];
+const HLC={cc:'rgba(31,138,203,.30)',kr:'rgba(46,170,190,.38)',dh:'rgba(140,100,210,.34)',er:'rgba(240,180,20,.42)',mt:'rgba(70,170,80,.36)',am:'rgba(215,110,125,.36)',cy:'rgba(40,160,150,.36)',te:'rgba(90,90,210,.30)',ld:'rgba(31,138,203,.20)'};
+
+/* ====================================================================
+   state
+   ==================================================================== */
+let PID=0; const pid=()=>'p'+(++PID).toString(36)+Math.random().toString(36).slice(2,6);
+function newPiece(type,cls,opts){const base={AT:{sub:'mal'},tAT:{sub:'mal'},A:{aa:'Gly'},TE:{mode:'hydro',nuc:null}}[type]||{};return{id:pid(),type,cls,opts:Object.assign({},base,opts||{})}}
+const newMod=(domains=[],iter=1)=>({id:pid(),domains,iter,atSrc:0});
+let S={modules:[],trans:[]}, view='final', sel=-1, showNums=false, hist=[], hi=-1, SIM=null;
+
+function allowedAT(m){const ks=m.domains.some(d=>d.type==='KS'),q=m.domains.some(d=>d.type==='KSQ');return(ks||q)?EXTENDERS:STARTERS}
+function normalize(){
+  S.modules.forEach(m=>{
+    const al=allowedAT(m);
+    m.domains.forEach(d=>{if(d.type==='AT'&&!al.includes(d.opts.sub))d.opts.sub=al[0]});
+    if(!m.domains.some(d=>d.type==='KS'))m.iter=1;
+    m.iter=Math.max(1,Math.min(12,m.iter|0||1));
+    m.atSrc=S.trans.length?Math.max(0,Math.min(S.trans.length-1,m.atSrc|0)):0;
+  });
+}
+
+/* ====================================================================
+   simulation engine
+   ==================================================================== */
+const fadd=(F,d,s=1)=>{for(const k in d)F[k]=(F[k]||0)+s*d[k];return F};
+const fclone=F=>Object.assign({C:0,H:0,N:0,O:0,S:0},F);
+const cloneAtoms=a=>a.map(x=>({...x,subs:x.subs.slice(),ring:x.ring?{...x.ring}:null}));
+let AID=0;
+const mkAtom=(el_,u,o)=>({id:++AID,el:el_,u,o:o||null,subs:[],dbl:false,aa:null,nh:null,ring:null});
+function starterAtoms(k,u){const a=o=>mkAtom('C',u,o);
+  switch(k){case'ace':return[a('O'),a()];case'pro':return[a('O'),a(),a()];case'but':return[a('O'),a(),a(),a()];
+   case'iso':{const b=a();b.subs=['Me'];return[a('O'),b,a()]}
+   case'lac':return[a('O'),a('OH'),a()]}}
+const hasAny=(D,arr)=>D.some(d=>arr.includes(d.type));
+
+function simulate(S){
+  const R={steps:[],issues:[],final:null,F:null,broken:false,st:null,kind:'none',teInfo:{},ringSize:0,released:false,usedTrans:[]};
+  const st={starter:null,ext:{},co2:0,nadph:0,sam:0,atp:0,coa:0,res:[]};
+  let chain=null,F=null,unit=-1,carr=null,released=false,broken=false,rel=null,lastGood=null;
+  let nOwn=0,nTr=0,nNR=0,anyIter=false;const used=new Set();
+  const issue=(lvl,mi,en,vi)=>R.issues.push({lvl,mi,m:{en,vi}});
+  S.modules.forEach((m,mi)=>{
+    const D=m.domains,has=t=>D.some(d=>d.type===t),get=t=>D.find(d=>d.type===t);
+    const info={mi,status:'ok',ev:[],chg:[],role:null,beta:null,res:null,snap:null,starter:null,ext:null};
+    R.steps.push(info);
+    const ev=(en,vi)=>info.ev.push({en,vi});
+    const fail=(en,vi)=>{info.status='err';issue('err',mi,en,vi);broken=true};
+    const warn=(en,vi)=>{if(info.status==='ok')info.status='warn';issue('warn',mi,en,vi)};
+    const snapNow=()=>{if(chain)info.snap={atoms:cloneAtoms(chain.atoms),F:fclone(F),carr:released?null:carr,rel:released?rel:null}};
+    if(!D.length){info.status='empty';snapNow();return}
+    if(released){info.status='skip';issue('warn',mi,'This module comes after the TE, so it is not simulated.','Module này nằm sau TE nên không được mô phỏng.');return}
+    if(broken){info.status='skip';return}
+    let isPK=hasAny(D,PKT);const isNR=hasAny(D,NRT);
+    const carrierP=D.find(d=>d.type==='ACP'||d.type==='T');
+    if(!isPK&&!isNR&&carrierP&&!chain&&S.trans.length>0)isPK=true; // ACP-only loading module served by a trans-AT
+    if(isPK&&isNR){fail('PKS and NRPS domains are in the same module. Put them in separate modules.','Domain PKS và NRPS nằm chung một module. Hãy tách thành các module riêng.')}
+    else if(isPK){
+      const ks=has('KS'),ksq=has('KSQ'),at=get('AT');
+      const tsrc=S.trans.length?S.trans[Math.min(m.atSrc|0,S.trans.length-1)]:null;
+      if(!ks){
+        info.role='load';
+        if(chain){fail('This module has no KS, so its unit cannot be joined and the chain from the previous module is stranded. Add a KS.','Module này không có KS nên đơn vị của nó không được nối và chuỗi từ module trước bị kẹt. Thêm KS.')}
+        else{
+          let key=null;
+          if(has('GTP'))key='lac';else if(at)key=at.opts.sub;else if(tsrc){key=tsrc.opts.sub;used.add(tsrc.id)}
+          if(!key)fail('The loading module has no starter source. Add an AT (starter substrate), a GT/P loader, or a trans-AT protein.','Module nạp chưa có nguồn starter. Thêm AT (cơ chất starter), bộ nạp GT/P hoặc protein trans-AT.');
+          else if(!carrierP)fail('The starter has no carrier. Add an ACP to this module.','Starter không có protein mang. Thêm ACP vào module này.');
+          else{
+            let k2=key;
+            if(SUB[key].k==='e'){
+              if(ksq){k2=SUB[key].dec;st.co2++;ev('KSQ decarboxylates '+SUB[key].n.toLowerCase()+'-ACP (CO₂ lost).','KSQ khử carboxyl '+SUB[key].n.toLowerCase()+'-ACP (mất CO₂).')}
+              else fail('The module has no KS, so a malonyl-type unit cannot be used as a starter. Choose a starter substrate, or add KSQ to decarboxylate it.','Module không có KS nên đơn vị kiểu malonyl không thể làm starter. Chọn cơ chất starter hoặc thêm KSQ để khử carboxyl.');
+            }else if(ksq)warn('KSQ has nothing to decarboxylate because the starter is already an acyl-CoA.','KSQ không có gì để khử carboxyl vì starter đã là acyl-CoA.');
+            if(!broken){
+              unit++;chain={atoms:starterAtoms(k2,unit)};F=fclone(SUB[k2].acid);st.starter=k2;st.coa++;carr=carrierP.type==='T'?'T':'ACP';
+              info.starter=k2;info.chg=chain.atoms.map(a=>({id:a.id,k:'ld'}));
+              ev('AT/loader selects '+SUB[k2].n.toLowerCase()+' and the carrier holds it as a thioester.','AT/bộ nạp chọn '+SUB[k2].n.toLowerCase()+' và protein mang giữ dưới dạng thioester.');
+            }
+          }
+          if(!broken&&hasAny(D,['KR','DH','ER','MT']))warn('KR, DH, ER and MT need a KS in the same module, so they do nothing here.','KR, DH, ER và MT cần KS trong cùng module nên ở đây không tác dụng.');
+        }
+      }else{
+        info.role='ext';
+        if(at)nOwn++;else nTr++;
+        if(!at&&tsrc)used.add(tsrc.id);
+        if(at&&S.trans.length)issue('info',mi,'This module has its own AT, so it does not use a trans-AT.','Module có AT riêng nên không dùng trans-AT.');
+        const iters=Math.max(1,m.iter|0);if(iters>1)anyIter=true;
+        for(let it=1;it<=iters&&!broken;it++){
+          info.ev=it===1?info.ev:info.ev;info.chg=[];
+          const tag=iters>1?(lang==='vi'?'Vòng ':'Cycle ')+it+': ':'';
+          const tagE=iters>1?'Cycle '+it+': ':'',tagV=iters>1?'Vòng '+it+': ':'';
+          if(!chain){fail('KS has no chain to extend. Start the line with a loading module (AT + ACP, or KSQ + AT + ACP).','KS không có chuỗi để kéo dài. Bắt đầu dây chuyền bằng module nạp (AT + ACP hoặc KSQ + AT + ACP).');break}
+          let key;
+          if(at)key=at.opts.sub;else if(tsrc)key=tsrc.opts.sub;
+          else{fail('No AT: add an AT to this module (cis) or put a trans-AT protein in the discrete-enzyme lane.','Không có AT: thêm AT vào module (cis) hoặc đặt protein trans-AT vào làn enzyme rời.');break}
+          if(SUB[key].k!=='e'){fail('The AT supplies a starter, but this module extends the chain. Choose malonyl-, methylmalonyl- or ethylmalonyl-CoA.','AT đang cung cấp starter nhưng module này kéo dài chuỗi. Chọn malonyl-, methylmalonyl- hoặc ethylmalonyl-CoA.');break}
+          if(!carrierP){fail('The extender has no carrier. Add an ACP to this module.','Đơn vị kéo dài không có protein mang. Thêm ACP vào module.');break}
+          unit++;const sp=SUB[key];
+          const c1=mkAtom('C',unit,'O'),ca=mkAtom('C',unit);ca.subs=sp.R.slice();
+          const beta=chain.atoms[0];
+          chain.atoms.unshift(c1,ca);
+          fadd(F,sp.d);st.co2++;st.coa++;st.ext[key]=(st.ext[key]||0)+1;
+          info.ext=key;
+          info.chg.push({id:ca.id,k:'cc'},{id:beta.id,k:'cc'});
+          ev(tagE+'AT loads '+sp.n.toLowerCase()+'-CoA; KS condenses it with the chain (CO₂ lost): +2 carbons'+(sp.R.length?', new '+sp.R[0]+' branch':'')+'.',
+             tagV+'AT nạp '+sp.n.toLowerCase()+'-CoA; KS ngưng tụ với chuỗi (mất CO₂): thêm 2 carbon'+(sp.R.length?', nhánh '+sp.R[0]+' mới':'')+'.');
+          if(has('MT')){
+            if(ca.subs.length>=2)warn('MT: the α-carbon already carries two groups.','MT: carbon α đã mang hai nhóm thế.');
+            else{ca.subs.push('Me!');F.C++;F.H+=2;st.sam++;info.chg.push({id:ca.id,k:'mt'});ev(tagE+'MT: SAM methylates the α-carbon (red Me).',tagV+'MT: SAM methyl hóa carbon α (Me đỏ).')}
+          }
+          let lvl=0;const kr=get('KR'),kr0=get('KR0');
+          if(kr){beta.o='OH';F.H+=2;st.nadph++;lvl=1;info.chg.push({id:beta.id,k:'kr'});ev(tagE+'KR: NADPH reduces the β-ketone to a hydroxyl.',tagV+'KR: NADPH khử β-keto thành hydroxyl.')}
+          else if(kr0){ev(tagE+'KR⁰ is inactive: the β-ketone stays.',tagV+'KR⁰ không hoạt động: β-keto giữ nguyên.')}
+          if(has('DH')){
+            if(!kr)warn('DH needs the β-hydroxyl made by KR, so it does nothing here.','DH cần β-hydroxyl do KR tạo ra nên ở đây không tác dụng.');
+            else if(ca.subs.length>=2)warn('DH is blocked because the α-carbon has two groups and no α-hydrogen.','DH bị chặn vì carbon α có hai nhóm thế và không còn H-α.');
+            else{beta.o=null;ca.dbl=true;F.H-=2;F.O-=1;lvl=2;info.chg.push({id:beta.id,k:'dh'},{id:ca.id,k:'dh'});ev(tagE+'DH removes water: α,β C=C forms.',tagV+'DH loại nước: tạo liên kết đôi C=C ở α,β.')}
+          }
+          if(has('ER')){
+            if(lvl!==2)warn('ER needs the C=C made by DH, so it does nothing here.','ER cần liên kết đôi C=C do DH tạo ra nên ở đây không tác dụng.');
+            else{ca.dbl=false;F.H+=2;st.nadph++;lvl=3;info.chg.push({id:beta.id,k:'er'},{id:ca.id,k:'er'});ev(tagE+'ER: NADPH saturates the C=C, so the β-carbon is CH₂.',tagV+'ER: NADPH khử C=C nên carbon β thành CH₂.')}
+          }
+          info.beta=beta.o==='O'?'ketone':beta.o==='OH'?'oh':ca.dbl?'ene':'ch2';
+          if(lvl===0&&(has('DH')||has('ER'))&&!kr&&!has('DH')){}
+        }
+      }
+    }
+    else if(isNR){
+      info.role='nr';nNR++;
+      const A=get('A'),Cd=get('C')||get('Cy'),cy=get('Cy');
+      if(!A)fail('An NRPS module needs an A domain to choose the amino acid.','Module NRPS cần domain A để chọn amino acid.');
+      else if(!carrierP)fail('A needs a T domain to hold the aminoacyl group.','A cần domain T để giữ nhóm aminoacyl.');
+      else if(Cd&&!chain)fail('C needs a chain from the previous module. The first module only needs A + T.','C cần chuỗi từ module trước. Module đầu tiên chỉ cần A + T.');
+      else if(!Cd&&chain)fail('There is no C, so the chain from the previous module is never joined. Add a C (or Cy) to this module.','Không có C nên chuỗi từ module trước không được nối. Thêm C (hoặc Cy) vào module này.');
+      else{
+        const aa=A.opts.aa;unit++;
+        const c1=mkAtom('C',unit,'O'),ca=mkAtom('C',unit);ca.aa=aa;const n=mkAtom('N',unit);n.nh='NH';
+        fadd(F=F||fclone({}),AA[aa]);st.atp++;st.res.push(aa);info.res=aa;
+        ev('A selects '+aa+' and activates it with ATP; T holds '+aa+' as a thioester.','A chọn '+aa+' và hoạt hóa bằng ATP; T giữ '+aa+' dưới dạng thioester.');
+        if(Cd){
+          const up=chain.atoms[0];
+          chain.atoms=[c1,ca,n].concat(chain.atoms);F.H-=2;F.O-=1;
+          info.chg.push({id:n.id,k:'am'},{id:up.id,k:'am'});
+          ev('C: the amine of '+aa+' attacks the upstream thioester and forms an amide bond.','C: amine của '+aa+' tấn công thioester phía trước và tạo liên kết amide.');
+          if(cy){
+            if(['Cys','Ser','Thr'].includes(aa)){
+              ca.ring={kind:aa==='Cys'?'thz':aa==='Ser'?'oxz':'moxz',partner:up.id};up.o=null;n.nh='N';n.dbl=true;F.H-=2;F.O-=1;
+              info.chg.push({id:ca.id,k:'cy'},{id:up.id,k:'cy'});
+              ev('Cy: the '+(aa==='Cys'?'thiol':'hydroxyl')+' of '+aa+' attacks the preceding carbonyl and water is lost: '+(aa==='Cys'?'thiazoline':'oxazoline')+' ring.','Cy: '+(aa==='Cys'?'thiol':'hydroxyl')+' của '+aa+' tấn công carbonyl phía trước và mất nước: tạo vòng '+(aa==='Cys'?'thiazoline':'oxazoline')+'.');
+            }else warn('Cy only cyclises Cys, Ser or Thr, so here it acts as a plain C.','Cy chỉ đóng vòng Cys, Ser hoặc Thr nên ở đây hoạt động như C thường.');
+          }
+        }else{chain={atoms:[c1,ca,n]};info.chg=[{id:ca.id,k:'ld'}]}
+        carr='T';
+      }
+    }
+    else if(!has('TE')){
+      if(carrierP)warn('A carrier alone does nothing. Add the catalytic domains of the module.','Protein mang đứng một mình không làm gì. Hãy thêm các domain xúc tác của module.');
+    }
+    // ---- termination
+    if(!broken&&has('TE')){
+      const te=get('TE');
+      if(!chain)fail('The TE has no chain to release.','TE không có chuỗi để giải phóng.');
+      else{
+        const A=chain.atoms,n=A.length,cands=[];
+        for(let i=3;i<n;i++)if(A[i].o==='OH')cands.push({idx:i,type:'OH',size:i+2});
+        const last=A[n-1];if(last.el==='N'&&n>=4&&last.nh!=='N')cands.push({idx:n-1,type:'NH2',size:n});
+        R.teInfo[te.id]={cands};
+        if(te.opts.mode==='cyc'){
+          if(!cands.length){warn('No OH or free amine is far enough along the chain to close a ring, so the TE hydrolyses it instead.','Không có OH hoặc amine tự do đủ xa để đóng vòng nên TE thủy phân thay thế.');rel={kind:'acid'};ev('TE hydrolyses the ester: free acid.','TE thủy phân ester: acid tự do.')}
+          else{
+            const c=cands.find(c=>c.idx===te.opts.nuc)||cands.reduce((a,b)=>b.idx>a.idx?b:a);
+            rel={kind:c.type==='OH'?'lactone':'lactam',idx:c.idx,size:c.size};F.H-=2;F.O-=1;R.ringSize=c.size;
+            info.chg.push({id:A[0].id,k:'te'},{id:A[c.idx].id,k:'te'});
+            ev('TE cyclises the chain: '+(c.type==='OH'?'the hydroxyl at C'+(c.idx+1):'the N-terminal amine')+' attacks the ester, giving a '+c.size+'-membered '+(c.type==='OH'?'lactone':'lactam')+'.','TE đóng vòng chuỗi: '+(c.type==='OH'?'hydroxyl ở C'+(c.idx+1):'amine đầu N')+' tấn công ester, tạo '+(c.type==='OH'?'lactone':'lactam')+' '+c.size+' cạnh.');
+          }
+        }else{rel={kind:'acid'};info.chg.push({id:A[0].id,k:'te'});ev('TE hydrolyses the thioester: free acid.','TE thủy phân thioester: acid tự do.')}
+        released=true;R.released=true;
+      }
+    }
+    if(!broken)snapNow();
+    if(!broken&&chain)lastGood={atoms:cloneAtoms(chain.atoms),F:fclone(F),carr:released?null:carr,rel:released?rel:null};
+    if(broken&&lastGood)info.snap=lastGood;
+  });
+  // unused trans-AT
+  S.trans.forEach((t,i)=>{if(!used.has(t.id)&&S.modules.length)issue('info',-1,'A trans-AT protein is not serving any module yet.','Protein trans-AT chưa phục vụ module nào.')});
+  R.usedTrans=[...used];
+  R.broken=broken;R.st=st;
+  R.final=lastGood;R.F=lastGood?lastGood.F:null;
+  if(R.F)R.ringSize=lastGood.rel&&lastGood.rel.size?lastGood.rel.size:0;
+  const pks=nOwn+nTr>0||R.steps.some(x=>x.role==='load'&&x.snap);
+  const loadOnly=!nOwn&&!nTr&&!nNR;
+  if(!S.modules.length||!R.final)R.kind='none';
+  else if(loadOnly&&pks)R.kind=S.trans.length?'k_trans':'k_cis';
+  else if(pks&&nNR){R.kind=nTr?'k_hyb_t':'k_hyb_c'}
+  else if(pks){R.kind=nTr&&nOwn?'k_mixed':nTr?'k_trans':'k_cis'}
+  else R.kind='k_nrps';
+  R.anyIter=anyIter;
+  return R;
+}
+function formulaStr(F){const o=['C','H','N','O','S'];return o.filter(k=>F[k]).map(k=>k+(F[k]>1?F[k]:'')).join('')}
+function formulaHTML(F){const o=['C','H','N','O','S'];return o.filter(k=>F[k]).map(k=>k+(F[k]>1?'<sub>'+F[k]+'</sub>':'')).join('')}
+const massOf=F=>Object.keys(MASS).reduce((s,k)=>s+(F[k]||0)*MASS[k],0);
+
+/* ====================================================================
+   structure drawing
+   ==================================================================== */
+function Canvas(){
+  const c={hl:[],bd:[],lb:[],x0:1e9,y0:1e9,x1:-1e9,y1:-1e9};
+  const f=v=>Math.round(v*10)/10;
+  c.bb=(x,y,r=3)=>{c.x0=Math.min(c.x0,x-r);c.x1=Math.max(c.x1,x+r);c.y0=Math.min(c.y0,y-r);c.y1=Math.max(c.y1,y+r)};
+  c.line=(a,b,col,w=2)=>{c.bd.push(`<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`);c.bb(a[0],a[1]);c.bb(b[0],b[1])};
+  c.text=(s,x,y,col,sz=13,anchor='middle')=>{c.lb.push(`<text x="${f(x)}" y="${f(y)}" text-anchor="${anchor}" dominant-baseline="central" font-size="${sz}" font-weight="700" fill="${col}" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round" font-family="IBM Plex Sans,system-ui,sans-serif">${s}</text>`);c.bb(x,y,String(s).length*4.5+4)};
+  c.circ=(p,r,fill,stroke)=>{c.hl.push(`<circle cx="${f(p[0])}" cy="${f(p[1])}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="1.5" stroke-dasharray="4 3"/>`);c.bb(p[0],p[1],r)};
+  c.poly=(pts,col,w=2)=>{for(let i=0;i<pts.length;i++)c.line(pts[i],pts[(i+1)%pts.length],col,w)};
+  return c;
+}
+const vunit=v=>{const l=Math.hypot(v[0],v[1])||1;return[v[0]/l,v[1]/l]};
+const lbl=s=>s.replace('H2N','H₂N');
+
+function structSVG(snap,opts){
+  const atoms=snap.atoms,n=atoms.length,rel=snap.rel||{kind:'bound'};
+  const ringMode=rel.kind==='lactone'||rel.kind==='lactam';
+  const g=Canvas(),SS=28,HH=16,P=[],NN=[],TT=[];
+  const col=a=>(opts.keep&&!opts.keep.has(a.u))?'#c3cad3':UCOL[(opts.umap?opts.umap[a.u]:a.u)%UCOL.length];
+  let cen=null,X=null;
+  if(!ringMode){
+    for(let k=0;k<n;k++){const up=(k+1)%2===1;P.push([-SS*(k+1),up?-HH:0]);NN.push([0,up?-1:1]);TT.push([1,0])}
+  }else{
+    const m=rel.idx,hasX=rel.kind==='lactone',nr=m+1+(hasX?1:0),Rr=33/(2*Math.sin(Math.PI/nr));
+    const ang=j=>Math.PI/nr+j*2*Math.PI/nr,Q=j=>[Rr*Math.cos(ang(j)),Rr*Math.sin(ang(j))];
+    cen=[0,0];
+    for(let k=0;k<=m;k++){P[k]=Q(k);NN[k]=vunit(P[k]);TT[k]=[-NN[k][1],NN[k][0]]}
+    if(hasX)X=Q(m+1);
+    const th=ang(m);
+    for(let k=m+1;k<n;k++){const phi=th+((k-m)%2?1:-1)*Math.PI/6;P[k]=[P[k-1][0]+SS*Math.cos(phi),P[k-1][1]+SS*Math.sin(phi)]}
+    for(let k=m+1;k<n;k++){let nv;
+      if(k<n-1){const u1=vunit([P[k-1][0]-P[k][0],P[k-1][1]-P[k][1]]),u2=vunit([P[k+1][0]-P[k][0],P[k+1][1]-P[k][1]]);nv=vunit([-(u1[0]+u2[0]),-(u1[1]+u2[1])])}
+      else nv=vunit([P[k][0]-P[k-1][0],P[k][1]-P[k-1][1]]);
+      NN[k]=nv;TT[k]=[-nv[1],nv[0]]}
+  }
+  const pt=(k,a,b)=>[P[k][0]+TT[k][0]*a+NN[k][0]*b,P[k][1]+TT[k][1]*a+NN[k][1]*b];
+  // highlights
+  const idIdx={};atoms.forEach((a,i)=>idIdx[a.id]=i);
+  (opts.chg||[]).forEach(c=>{const i=idIdx[c.id];if(i!=null)g.circ(P[i],16,HLC[c.k]||HLC.cc,'rgba(60,60,60,.45)')});
+  // thiazoline / oxazoline rings
+  const dblToward={};
+  atoms.forEach((a,k)=>{
+    if(!a.ring||k+2>=n)return;
+    const A=P[k],B=P[k+1],Cc=P[k+2],M=[(A[0]+Cc[0])/2,(A[1]+Cc[1])/2],e=vunit([M[0]-B[0],M[1]-B[1]]);
+    const dAC=Math.hypot(Cc[0]-A[0],Cc[1]-A[1]),sh=Math.max(0,(dAC-32)/2),u=vunit([Cc[0]-A[0],Cc[1]-A[1]]);
+    const TA=[A[0]+e[0]*29+u[0]*sh,A[1]+e[1]*29+u[1]*sh],TS=[Cc[0]+e[0]*29-u[0]*sh,Cc[1]+e[1]*29-u[1]*sh];
+    const cc=col(a);g.line(A,TA,cc);g.line(TA,TS,cc);g.line(TS,Cc,cc);
+    g.text(a.ring.kind==='thz'?'S':'O',TS[0]+e[0]*3,TS[1]+e[1]*3,cc,13);
+    const ctr=[(A[0]+B[0]+Cc[0]+TA[0]+TS[0])/5,(A[1]+B[1]+Cc[1]+TA[1]+TS[1])/5];dblToward[k+1]=ctr;
+    if(a.ring.kind==='moxz'){const o=vunit([TA[0]-ctr[0],TA[1]-ctr[1]]);g.line(TA,[TA[0]+o[0]*20,TA[1]+o[1]*20],cc);g.text('Me',TA[0]+o[0]*30,TA[1]+o[1]*30,cc,13)}
+  });
+  // bonds
+  const dbl=(p,q,c,toward)=>{const d=vunit([q[0]-p[0],q[1]-p[1]]);let w=[-d[1],d[0]];const mid=[(p[0]+q[0])/2,(p[1]+q[1])/2];
+    if(toward){if((toward[0]-mid[0])*w[0]+(toward[1]-mid[1])*w[1]<0)w=[-w[0],-w[1]]}else if(w[1]<0)w=[-w[0],-w[1]];
+    g.line([p[0]+w[0]*4.5,p[1]+w[1]*4.5],[q[0]+w[0]*4.5,q[1]+w[1]*4.5],c,2)};
+  for(let k=0;k<n-1;k++){
+    g.line(P[k],P[k+1],col(atoms[k+1]),2);
+    if(atoms[k].dbl)dbl(P[k],P[k+1],col(atoms[k+1]),dblToward[k]||cen);
+  }
+  // anchor / release
+  if(!ringMode){
+    const c0=col(atoms[0]);g.line([0,0],P[0],c0,2);
+    if(rel.kind==='acid')g.text('HO',3,0,c0,13);
+    else{g.text('S',0,0,'#b45309',13);
+      const w=snap.carr==='T'?30:40;g.lb.push(`<rect x="14" y="-11" width="${w}" height="22" rx="11" fill="#fbc98e" stroke="#b45309" stroke-width="1.5"/><text x="${14+w/2}" y="1" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="700" fill="#5a2d00" font-family="IBM Plex Sans,system-ui,sans-serif">${snap.carr==='T'?'T':'ACP'}</text>`);g.bb(14+w,0,4)}
+  }else if(rel.kind==='lactone'){
+    const m=rel.idx;g.line(P[m],X,col(atoms[m]),2);g.line(X,P[0],col(atoms[0]),2);g.text('O',X[0],X[1],'#444',13);
+  }else{
+    g.line(P[rel.idx],P[0],col(atoms[0]),2);
+  }
+  // decorations
+  let cnum=0;
+  atoms.forEach((a,k)=>{
+    const c=col(a),p=P[k];
+    if(a.el==='C')cnum++;
+    if(a.el==='N'){
+      const closing=ringMode&&rel.kind==='lactam'&&k===rel.idx;
+      g.text(a.nh==='N'?'N':(k===n-1&&!closing?'H₂N':'HN'),p[0],p[1],c,13);
+    }
+    const skipOH=ringMode&&rel.kind==='lactone'&&k===rel.idx;
+    if(a.o==='O'){
+      for(const s of[-2.5,2.5])g.line(pt(k,s,0),pt(k,s,20),c);
+      g.text('O',...pt(k,0,30),c,13);
+    }else if(a.o==='OH'&&!skipOH){g.line(p,pt(k,0,20),c);g.text('OH',...pt(k,0,31),c,13)}
+    const subs=a.subs||[];
+    subs.forEach((sname,i)=>{
+      const angs=subs.length===1?[0]:[-32,32],th=angs[i]*Math.PI/180,sn=Math.sin(th),cs=Math.cos(th);
+      const base=sname.replace('!',''),cc=sname.endsWith('!')?'#d33a3a':c;
+      if(base==='Me'){g.line(p,pt(k,20*sn,20*cs),cc);g.text('Me',...pt(k,30*sn,30*cs),cc,13)}
+      else if(base==='Et'){const e1=pt(k,20*sn,20*cs);g.line(p,e1,cc);const th2=th+(i%2?-1:1)*Math.PI/3;
+        const e2=pt(k,20*sn+20*Math.sin(th2),20*cs+20*Math.cos(th2));g.line(e1,e2,cc);g.text('Me',...pt(k,20*sn+30*Math.sin(th2),20*cs+30*Math.cos(th2)),cc,13)}
+    });
+    if(a.aa&&!a.ring)drawTree(g,SC[a.aa]||[],[0,0],0,c,(la,lb_)=>pt(k,la,lb_));
+    if(opts.nums&&a.el==='C'){const q=pt(k,0,-12);g.text(String(cnum),q[0],q[1],'#8a94a3',9)}
+  });
+  if(!atoms.length)return'';
+  const m=16,w=g.x1-g.x0+2*m,h=g.y1-g.y0+2*m;
+  const body=g.hl.join('')+g.bd.join('')+g.lb.join('');
+  return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${g.x0-m} ${g.y0-m} ${w} ${h}" style="width:100%;min-width:${Math.round(w*.55)}px;max-width:${Math.round(w*1.7)}px" role="img" aria-label="Product structure">${body}</svg>`;
+}
+function drawTree(g,nodes,p0,dir,c,fr){
+  nodes.forEach(nd=>{
+    if(nd[0]==='ring'){
+      const th=(dir+nd[1])*Math.PI/180,L=nd[2],e=[p0[0]+L*Math.sin(th),p0[1]+L*Math.cos(th)];
+      g.line(fr(...p0),fr(...e),c);
+      const ctr=[e[0]+20*Math.sin(th),e[1]+20*Math.cos(th)],V=[];
+      for(let i=0;i<6;i++){const a=th+Math.PI+i*Math.PI/3;V.push([ctr[0]+20*Math.sin(a),ctr[1]+20*Math.cos(a)])}
+      const sc=(v,t)=>[ctr[0]+(v[0]-ctr[0])*t,ctr[1]+(v[1]-ctr[1])*t];
+      for(let i=0;i<6;i++){g.line(fr(...V[i]),fr(...V[(i+1)%6]),c)}
+      for(const i of[1,3,5]){const a=sc(V[i],.72),b=sc(V[(i+1)%6],.72);g.line(fr(...a),fr(...b),c,1.6)}
+      if(nd[3]){const q=V[3],q2=[q[0]+20*Math.sin(th),q[1]+20*Math.cos(th)];g.line(fr(...q),fr(...q2),c);g.text(nd[3],...fr(q[0]+30*Math.sin(th),q[1]+30*Math.cos(th)),c,13)}
+      return;
+    }
+    const[ang,len,label,db,kids]=nd,th=(dir+ang)*Math.PI/180,e=[p0[0]+len*Math.sin(th),p0[1]+len*Math.cos(th)];
+    if(db){const o=[2.4*Math.cos(th),-2.4*Math.sin(th)];
+      g.line(fr(p0[0]+o[0],p0[1]+o[1]),fr(e[0]+o[0],e[1]+o[1]),c);g.line(fr(p0[0]-o[0],p0[1]-o[1]),fr(e[0]-o[0],e[1]-o[1]),c)}
+    else g.line(fr(...p0),fr(...e),c);
+    if(label)g.text(label,...fr(p0[0]+(len+10)*Math.sin(th),p0[1]+(len+10)*Math.cos(th)),c,13);
+    if(kids)drawTree(g,kids,e,dir+ang,c,fr);
+  });
+}
+
+/* ====================================================================
+   presets & targets
+   ==================================================================== */
+const C_=(t,o)=>newPiece(t,'cis',o), T_=(t,o)=>newPiece(t,'trans',o), N_=(t,o)=>newPiece(t,'nrps',o), R_=(t,o)=>newPiece(t,'rel',o);
+const PRESETS={
+ hexa:()=>({trans:[],modules:[
+  newMod([C_('AT',{sub:'ace'}),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mal'}),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('DH'),C_('ER'),C_('KR'),C_('ACP'),R_('TE')])]}),
+ fas:()=>({trans:[],modules:[
+  newMod([C_('AT',{sub:'ace'}),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mal'}),C_('KR'),C_('DH'),C_('ER'),C_('ACP'),R_('TE')],7)]}),
+ debs:()=>({trans:[],modules:[
+  newMod([C_('AT',{sub:'pro'}),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR0'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('DH'),C_('ER'),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR'),C_('ACP'),R_('TE',{mode:'cyc'})])]}),
+ pik:()=>({trans:[],modules:[
+  newMod([C_('KSQ'),C_('AT',{sub:'mmal'}),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mal'}),C_('DH'),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('DH'),C_('ER'),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('ACP'),R_('TE',{mode:'cyc'})])]}),
+ nrps:()=>({trans:[],modules:[
+  newMod([N_('A',{aa:'Ile'}),N_('T')]),
+  newMod([N_('C'),N_('A',{aa:'Ala'}),N_('T')]),
+  newMod([N_('Cy'),N_('A',{aa:'Cys'}),N_('T'),R_('TE')])]}),
+ fr9:()=>({trans:[T_('tAT',{sub:'mal'})],modules:[
+  newMod([T_('GTP'),T_('ACP')]),
+  newMod([T_('KS'),T_('KR'),T_('DH'),T_('ACP')]),
+  newMod([N_('C'),N_('A',{aa:'Thr'}),N_('T')]),
+  newMod([T_('KS'),T_('MT'),T_('KR'),T_('DH'),T_('ER'),T_('ACP'),R_('TE')])]})
+};
+const TARGETS=[
+ {id:'hexa',n:{en:'5-hydroxy-2-methylhexanoic acid',vi:'Acid 5-hydroxy-2-methylhexanoic'},f:'C7H14O3',ring:0,
+  d:{en:'The two-module cis-AT line from the lecture: acetyl starter, malonyl + KR, then methylmalonyl + full KR–DH–ER.',vi:'Dây chuyền cis-AT hai module trong bài giảng: starter acetyl, malonyl + KR, rồi methylmalonyl + đủ KR–DH–ER.'}},
+ {id:'fas',n:{en:'Palmitic acid (FAS-like)',vi:'Acid palmitic (kiểu FAS)'},f:'C16H32O2',ring:0,
+  d:{en:'Acetyl + 7 malonyl, fully reduced every round. Use the module repeat (↻) to make it iterative, like FAS.',vi:'Acetyl + 7 malonyl, khử hoàn toàn mỗi vòng. Dùng nút lặp (↻) để module chạy lặp như FAS.'}},
+ {id:'debs',n:{en:'6-Deoxyerythronolide B (DEBS)',vi:'6-Deoxyerythronolide B (DEBS)'},f:'C21H38O6',ring:14,
+  d:{en:'Propionyl starter, six methylmalonyl extenders, KR⁰ in module 3, KR–DH–ER in module 4, TE macrolactonisation.',vi:'Starter propionyl, sáu đơn vị methylmalonyl, KR⁰ ở module 3, KR–DH–ER ở module 4, TE đóng vòng macrolactone.'}},
+ {id:'pik',n:{en:'Narbonolide (pikromycin PKS)',vi:'Narbonolide (PKS pikromycin)'},f:'C20H32O5',ring:14,
+  d:{en:'KSQ loading module, one malonyl (module 2) among methylmalonyl units, ketones left at C9 and C3.',vi:'Module nạp KSQ, một malonyl (module 2) giữa các đơn vị methylmalonyl, giữ ketone ở C9 và C3.'}},
+ {id:'nrps',n:{en:'Ile–Ala–Cys thiazoline (NRPS)',vi:'Ile–Ala–Cys thiazoline (NRPS)'},f:'C12H21N3O3S',ring:0,
+  d:{en:'Three A–T modules, C then Cy, and a TE. Cy closes the thiazoline ring on Cys.',vi:'Ba module A–T, C rồi Cy và một TE. Cy đóng vòng thiazoline trên Cys.'}}
+];
+const EXTRA=[{id:'fr9',n:{en:'trans-AT PKS–NRPS hybrid (fr9-inspired)',vi:'PKS trans-AT lai NRPS (theo fr9)'},f:'C12H21NO5',
+  d:{en:'GT/P loader, a free-standing trans-AT serving modules 1 and 3, and an NRPS module that adds Thr in the middle.',vi:'Bộ nạp GT/P, một trans-AT rời phục vụ module 1 và 3, và một module NRPS thêm Thr ở giữa.'}}];
+
+/* ====================================================================
+   UI: palette
+   ==================================================================== */
+function domEl(type,cls,extra){
+  const d=DT[type];
+  const e=el('div',{class:`dom k-${type} cls-${cls}${BOX.has(type)&&!WIDE.has(type)?' box':''}${WIDE.has(type)?' wide box':''}`},el('span',{},d.ab));
+  if(type==='ACP'||type==='T')e.append(el('div',{html:'<svg class="arm" width="16" height="24" viewBox="0 0 16 24"><path d="M8 0 C15 5 1 9 8 14 S8 19 8 22" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round"/><text x="8" y="23" text-anchor="middle">SH</text></svg>'}).firstChild);
+  return e;
+}
+function renderPalette(){
+  const P=$('#palette');P.replaceChildren();P.dataset.trash=tr('trash');const PS=el('div',{class:'palscroll'});P.append(PS);
+  PAL.forEach(([cls,types])=>{
+    const sec=el('div',{class:`sec cls-${cls}`},el('h3',{},el('i'),L(CLASSES[cls].n)),el('p',{},L(CLASSES[cls].s)));
+    const chips=el('div',{class:'chips'});
+    types.forEach(t=>{
+      const cap=t==='tAT'?'trans-AT':DT[t].sn;
+      const ch=el('div',{class:'chip',tabindex:0,role:'button','aria-label':L(DT[t].n)+' ('+cls+')'},domEl(t,cls),el('small',{},cap));
+      ch.dataset.type=t;ch.dataset.cls=cls;
+      ch.addEventListener('pointerdown',e=>startDrag(e,{src:'pal',type:t,cls},ch));
+      ch.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();addByClick(t,cls)}});
+      ch.addEventListener('mouseenter',()=>showInfo(t,cls));ch.addEventListener('focus',()=>showInfo(t,cls));
+      chips.append(ch);
+    });
+    sec.append(chips);PS.append(sec);
+  });
+  P.append(el('div',{id:'info'}));
+  showInfo(null);
+}
+let infoKey=null;
+function showInfo(type,cls){
+  infoKey=type?[type,cls]:null;
+  const box=$('#info');if(!box)return;
+  if(!type){box.innerHTML=`<span style="color:var(--mute)">${tr('hint')}</span>`;box.style.removeProperty('--cc');return}
+  const d=DT[type];box.style.setProperty('--cc',`var(--${cls})`);
+  box.innerHTML=`<span class="tag">${L(CLASSES[cls].n)}</span><br><b>${d.ab.replace('⁰','⁰')} · ${L(d.n)}</b><br>${L(d.d)}`;
+}
+
+/* ====================================================================
+   UI: board
+   ==================================================================== */
+function modLabels(){
+  let n=0;
+  return S.modules.map(m=>{
+    const D=m.domains,ks=D.some(d=>d.type==='KS'),pk=hasAny(D,PKT),onlyTE=D.length&&D.every(d=>d.type==='TE');
+    if(!D.length)return{s:'M',l:tr('module')};
+    if(onlyTE)return{s:'TE',l:tr('release')};
+    if(pk&&!ks&&n===0&&!D.some(d=>d.type==='A'))return{s:'L',l:tr('loading')};
+    n++;return{s:'M'+n,l:tr('module')+' '+n};
+  });
+}
+let hoverMi=null,VW={snap:null,chg:[]};
+function unitMap(){const um=[];let u=0;S.modules.forEach((m,mi)=>{const st=SIM&&SIM.steps[mi];if(!st||['empty','skip','err'].includes(st.status))return;
+  const n=st.role==='ext'?Math.max(1,m.iter|0):(st.role==='load'||st.role==='nr')?1:0;for(let k=0;k<n;k++)um[u++]=mi});return um}
+function drawCanvas(){
+  const canvas=$('#canvas');if(!VW.snap||!VW.snap.atoms.length)return;
+  const um=unitMap(),keep=hoverMi==null?null:new Set(um.map((m,u)=>m===hoverMi?u:-1).filter(u=>u>=0));
+  canvas.innerHTML=structSVG(VW.snap,{chg:VW.chg,nums:showNums,umap:um,keep});
+}
+function renderBoard(){
+  const B=$('#board');B.replaceChildren();
+  const labs=modLabels();
+  const line=el('div',{id:'line'});
+  const gap=(gi,last)=>{const g=el('div',{class:'gap'+(last?' last':''),'data-gi':gi},last?(S.modules.length?tr('newMod'):tr('newMod')):'+');return g};
+  S.modules.forEach((m,mi)=>{
+    line.append(gap(mi,false));
+    const step=SIM.steps[mi]||{status:'empty'};
+    const issues=SIM.issues.filter(i=>i.mi===mi);
+    const hasU=!!(step.role&&step.role!=='te'&&!['empty','skip','err'].includes(step.status)&&(step.role==='ext'||step.role==='load'||step.role==='nr'));
+    const card=el('div',{class:'mod'+(sel===mi?' sel':'')+(hasU?' cm':''),'data-mi':mi,style:hasU?'--mc:'+UCOL[mi%UCOL.length]:null});
+    if(hasU){card.addEventListener('mouseenter',()=>{if(dragging)return;hoverMi=mi;drawCanvas()});card.addEventListener('mouseleave',()=>{hoverMi=null;drawCanvas()})}
+    const hasKS=m.domains.some(d=>d.type==='KS');
+    const head=el('div',{class:'mh'},
+      el('button',{class:'nm',onclick:()=>{sel=mi;view=mi;refreshViews()},title:issues.map(i=>L(i.m)).join('\n')||labs[mi].l},el('span',{class:'dot '+step.status}),labs[mi].l),
+      el('span',{class:'sp'},
+        hasKS?el('span',{class:'iter',title:tr('iter')},
+          el('button',{class:'ib','aria-label':'-',onclick:()=>{m.iter=Math.max(1,m.iter-1);commit()}},'−'),'↻×'+m.iter,
+          el('button',{class:'ib','aria-label':'+',onclick:()=>{m.iter=Math.min(12,m.iter+1);commit()}},'+')):null,
+        el('button',{class:'ib',title:tr('moveL'),disabled:mi===0,onclick:()=>moveMod(mi,-1)},'‹'),
+        el('button',{class:'ib',title:tr('moveR'),disabled:mi===S.modules.length-1,onclick:()=>moveMod(mi,1)},'›'),
+        el('button',{class:'ib',title:tr('delMod'),onclick:()=>{S.modules.splice(mi,1);if(sel>=S.modules.length)sel=-1;if(typeof view==='number')view='final';commit()}},'×')));
+    const dom=el('div',{class:'mdom'});
+    if(!m.domains.length)dom.append(el('div',{class:'ph'},tr('dropHere')));
+    m.domains.forEach(p=>dom.append(pieceEl(p,mi,m)));
+    const foot=el('div',{class:'mf'});
+    if(step.role==='load'&&step.starter)foot.append(el('span',{class:'pill hl'},tr('starter')+': '+SUB[step.starter].n));
+    if(step.role==='ext'){if(step.ext)foot.append(el('span',{class:'pill hl'},'R = '+({mal:'H',mmal:'Me',emal:'Et'}[step.ext])));
+      if(step.beta)foot.append(el('span',{class:'pill'},tr('beta')+': '+tr('oh_'+step.beta)))}
+    if(step.role==='nr'&&step.res)foot.append(el('span',{class:'pill hl'},step.res));
+    if(step.role==='ext'&&!m.domains.some(d=>d.type==='AT')&&S.trans.length>1){
+      const s=el('select',{class:'opt','aria-label':tr('loadedBy')});
+      S.trans.forEach((t,i)=>s.append(el('option',{value:i,selected:i===(m.atSrc|0)},tr('tAtN')+' #'+(i+1)+' · '+SUB[t.opts.sub].n)));
+      s.addEventListener('change',()=>{m.atSrc=+s.value;commit()});foot.append(s);
+    }
+    card.append(head,dom,foot);line.append(card);
+  });
+  line.append(gap(S.modules.length,true));
+  // lane
+  const lane=el('div',{id:'lane'},el('span',{class:'lt'},L({en:'',vi:''})||tr('lane')));
+  if(!S.trans.length)lane.append(el('span',{class:'lh'},tr('laneHint')));
+  S.trans.forEach((t,i)=>lane.append(pieceEl(t,-1,null,i)));
+  const lk=document.createElementNS('http://www.w3.org/2000/svg','svg');lk.id='links';
+  B.append(line,lane,lk);
+  requestAnimationFrame(drawLinks);
+}
+function pieceEl(p,mi,m,tIdx){
+  const wrap=el('div',{class:'pc','data-id':p.id,'data-mi':mi});
+  const d=domEl(p.type,p.cls);
+  d.tabIndex=0;d.setAttribute('role','button');d.setAttribute('aria-label',L(DT[p.type].n));
+  if(p.type==='tAT'&&S.trans.length>1)d.firstChild.textContent='trans-AT #'+(tIdx+1);
+  const x=el('button',{class:'x','aria-label':tr('remove'),onclick:e=>{e.stopPropagation();removePiece(p.id)}},'×');
+  d.append(x);wrap.append(d);
+  d.addEventListener('keydown',e=>{if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();removePiece(p.id)}});
+  d.addEventListener('mouseenter',()=>showInfo(p.type,p.cls));d.addEventListener('focus',()=>showInfo(p.type,p.cls));
+  d.addEventListener('pointerdown',e=>{if(e.target===x)return;startDrag(e,{src:mi<0?'lane':'mod',id:p.id,type:p.type,cls:p.cls,piece:p},wrap)});
+  // options
+  if(p.type==='AT'||p.type==='tAT'){
+    const s=el('select',{class:'opt','aria-label':tr('subLabel')});
+    if(p.type==='AT'){allowedAT(m).forEach(k=>s.append(el('option',{value:k,selected:p.opts.sub===k},SUB[k].n)))}
+    else{const g1=el('optgroup',{label:tr('grpS')}),g2=el('optgroup',{label:tr('grpE')});
+      STARTERS.forEach(k=>g1.append(el('option',{value:k,selected:p.opts.sub===k},SUB[k].n)));
+      EXTENDERS.forEach(k=>g2.append(el('option',{value:k,selected:p.opts.sub===k},SUB[k].n)));s.append(g2,g1)}
+    s.addEventListener('change',()=>{p.opts.sub=s.value;commit()});wrap.append(s);
+  }else if(p.type==='A'){
+    const s=el('select',{class:'opt','aria-label':tr('aaLabel')});Object.keys(AA).forEach(k=>s.append(el('option',{value:k,selected:p.opts.aa===k},k)));
+    s.addEventListener('change',()=>{p.opts.aa=s.value;commit()});wrap.append(s);
+  }else if(p.type==='TE'){
+    const s=el('select',{class:'opt','aria-label':tr('mode')});
+    [['hydro',tr('hydro')],['cyc',tr('cyc')]].forEach(([v,t])=>s.append(el('option',{value:v,selected:p.opts.mode===v},t)));
+    s.addEventListener('change',()=>{p.opts.mode=s.value;p.opts.nuc=null;commit()});wrap.append(s);
+    const info=SIM&&SIM.teInfo[p.id];
+    if(p.opts.mode==='cyc'&&info&&info.cands.length>1){
+      const s2=el('select',{class:'opt','aria-label':'nucleophile'});
+      s2.append(el('option',{value:'',selected:p.opts.nuc==null},tr('auto')));
+      info.cands.forEach(c=>s2.append(el('option',{value:c.idx,selected:p.opts.nuc===c.idx},(c.type==='OH'?'C'+(c.idx+1)+'–OH':'N-term')+' → '+c.size)));
+      s2.addEventListener('change',()=>{p.opts.nuc=s2.value===''?null:+s2.value;commit()});wrap.append(s2);
+    }
+  }
+  return wrap;
+}
+function drawLinks(){
+  const svg=$('#links'),B=$('#board');if(!svg||!B)return;
+  svg.replaceChildren();const br=B.getBoundingClientRect();
+  svg.setAttribute('width',B.scrollWidth);svg.setAttribute('height',B.scrollHeight);
+  const NSV='http://www.w3.org/2000/svg';
+  S.modules.forEach((m,mi)=>{
+    if(!m.domains.some(d=>d.type==='KS'||d.type==='ACP')||m.domains.some(d=>d.type==='AT'))return;
+    const step=SIM.steps[mi];if(!step||!(step.role==='ext'||step.role==='load'))return;
+    if(step.role==='load'&&m.domains.some(d=>d.type==='GTP'))return;
+    if(!S.trans.length)return;
+    const t=S.trans[Math.min(m.atSrc|0,S.trans.length-1)];
+    const te=$(`.pc[data-id="${t.id}"] .dom`),me=$(`.mod[data-mi="${mi}"]`);if(!te||!me)return;
+    const a=te.getBoundingClientRect(),b=me.getBoundingClientRect();
+    const x1=a.left+a.width/2-br.left,y1=a.top-br.top,x2=b.left+b.width/2-br.left,y2=b.bottom-br.top;
+    const path=document.createElementNS(NSV,'path');const my=(y1+y2)/2;
+    path.setAttribute('d',`M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`);svg.append(path);
+    const c=document.createElementNS(NSV,'circle');c.setAttribute('cx',x2);c.setAttribute('cy',y2);c.setAttribute('r',3.5);svg.append(c);
+  });
+}
+
+/* ====================================================================
+   UI: viewer
+   ==================================================================== */
+function tabLabel(mi){return modLabels()[mi].s}
+function renderViewer(){
+  // tabs
+  const tabs=$('#vtabs');tabs.replaceChildren();
+  const mk=(v,text,dis)=>{const b=el('button',{role:'tab','aria-selected':String(view===v),disabled:dis,onclick:()=>{view=v;if(typeof v==='number')sel=v;refreshViews()}},text);return b};
+  tabs.append(mk('final',tr('finalP'),!SIM.final));
+  const labs=modLabels();
+  S.modules.forEach((m,mi)=>{const st=SIM.steps[mi];tabs.append(mk(mi,tr('afterM')+' '+labs[mi].s,!(st&&st.snap)))});
+  // snapshot
+  let snap=null,chg=[],evs=[],stepIdx=-1;
+  if(view==='final'||!(SIM.steps[view]&&SIM.steps[view].snap)){view='final';snap=SIM.final}
+  else{stepIdx=view;snap=SIM.steps[view].snap;chg=SIM.steps[view].chg||[]}
+  const canvas=$('#canvas');
+  VW.snap=snap;VW.chg=stepIdx>=0?chg:[];hoverMi=null;
+  if(snap&&snap.atoms.length)drawCanvas();
+  else canvas.innerHTML=`<div class="empty">${tr('empty')}</div>`;
+  // legend
+  $('#legend').innerHTML=`<span>${tr('legend1')}</span><span style="color:#d33a3a">${tr('legend2')}</span>`+(stepIdx>=0?`<span>${tr('legend3')}</span>`:'');
+  // side
+  const side=$('#vside');side.replaceChildren();
+  const info=snap?snap:null;
+  const c1=el('div',{class:'card'},el('h4',{},tr('formula')));
+  if(info){
+    const F=info.F;
+    c1.append(el('div',{class:'formula',html:formulaHTML(F)}),
+      el('div',{class:'kv'},el('span',{},tr('mass')),el('span',{},massOf(F).toFixed(2)+' g/mol')));
+    if(info.rel&&info.rel.size)c1.append(el('div',{class:'kv'},el('span',{},tr('ring')),el('span',{},info.rel.size+'-membered')));
+    if(!info.rel)c1.append(el('div',{class:'kv'},el('span',{style:'color:var(--warn)'},tr('bound'))));
+    const kk=SIM.kind==='k_hyb_t'?tr('k_trans')+' + '+tr('k_nrps'):SIM.kind==='k_hyb_c'?tr('k_cis')+' + '+tr('k_nrps'):tr(SIM.kind);
+    c1.append(el('div',{class:'kv'},el('span',{},tr('kind')),el('span',{},kk+(SIM.anyIter?' · '+tr('k_it'):''))));
+    if(view==='final'&&SIM.final&&SIM.final.rel){
+      const fs=formulaStr(F);const hit=TARGETS.find(t=>t.f===fs&&t.ring===(SIM.final.rel.size||0));
+      if(hit)c1.append(el('div',{class:'match'},'🎯 '+tr('matches')+' '+L(hit.n)));
+    }
+  }else c1.append(el('div',{style:'color:var(--mute)'},'—'));
+  side.append(c1);
+  // blocks
+  if(view==='final'&&SIM.final){
+    const st=SIM.st,c=el('div',{class:'card'},el('h4',{},tr('blocks')));
+    if(st.starter)c.append(el('div',{class:'kv'},el('span',{},tr('kStart')),el('span',{},SUB[st.starter].n)));
+    const ex=Object.keys(st.ext).map(k=>st.ext[k]+'× '+SUB[k].n).join(', ');
+    if(ex)c.append(el('div',{class:'kv'},el('span',{},tr('kExt')),el('span',{},ex)));
+    if(st.res.length)c.append(el('div',{class:'kv'},el('span',{},tr('kRes')),el('span',{},st.res.slice().reverse().join('–'))));
+    [['nCoA',st.coa],['nCO2',st.co2],['nNADPH',st.nadph],['nSAM',st.sam],['nATP',st.atp]].forEach(([k,v])=>{if(v)c.append(el('div',{class:'kv'},el('span',{},tr(k)),el('span',{},'×'+v)))});
+    side.append(c);
+  }
+  // issues
+  const ic=el('div',{class:'card'},el('h4',{},tr('issues')));
+  if(!SIM.issues.length)ic.append(el('div',{class:'ok-line'},'✓ '+tr('noIssues')));
+  else{
+    if(SIM.broken)ic.append(el('div',{style:'color:var(--err);font-size:12.5px;margin-bottom:4px'},tr('broken')));
+    const labs2=modLabels();
+    SIM.issues.forEach(i=>ic.append(el('div',{class:'issue '+i.lvl,onclick:()=>{if(i.mi>=0){sel=i.mi;renderBoard();}}},el('b',{},i.mi>=0?labs2[i.mi].s:'•'),el('span',{},L(i.m)))));
+  }
+  side.append(ic);
+  // log
+  const lc=el('div',{class:'card'},el('h4',{},tr('steps')));
+  const ol=el('ul',{class:'log'});
+  const list=stepIdx>=0?[SIM.steps[stepIdx]]:SIM.steps;
+  const labs3=modLabels();
+  list.forEach(s=>{if(!s.ev.length)return;ol.append(el('li',{class:'mh2'},labs3[s.mi].l));s.ev.forEach(e=>ol.append(el('li',{},L(e))))});
+  lc.append(ol);side.append(lc);
+}
+function refreshViews(){renderBoard();renderViewer();renderDrawer()}
+
+/* ====================================================================
+   drawer (examples & targets)
+   ==================================================================== */
+function renderDrawer(){
+  const d=$('#drawer');d.replaceChildren();
+  d.append(el('div',{style:'display:flex;align-items:center;gap:8px'},el('h2',{style:'margin-right:auto'},tr('targets')),el('button',{class:'btn',onclick:()=>d.classList.remove('on')},tr('close'))),
+    el('p',{style:'margin:0;color:var(--mute);font-size:12.5px'},tr('targetsHint')));
+  const fs=SIM&&SIM.final&&SIM.final.rel?formulaStr(SIM.final.F):null,rs=SIM&&SIM.final&&SIM.final.rel?(SIM.final.rel.size||0):-1;
+  TARGETS.concat(EXTRA).forEach(t=>{
+    const ok=t.ring!=null&&fs===t.f&&rs===(t.ring||0)&&TARGETS.includes(t);
+    d.append(el('div',{class:'tg'},
+      el('div',{class:'r1'},el('b',{},L(t.n)),ok?el('span',{class:'st'},'✓ '+tr('solved')):null),
+      el('code',{},t.f+(t.ring?' · '+t.ring+'-membered ring':'')),
+      el('p',{},L(t.d)),
+      el('div',{},el('button',{class:'btn',onclick:()=>{loadPreset(t.id);d.classList.remove('on')}},tr('load')))));
+  });
+}
+function loadPreset(id){S=PRESETS[id]();sel=-1;view='final';commit();toast(L({en:'Example loaded. Try changing a domain.',vi:'Đã nạp ví dụ. Hãy thử đổi một domain.'}))}
+
+/* ====================================================================
+   mutations, history, persistence
+   ==================================================================== */
+function findPiece(id){for(let mi=0;mi<S.modules.length;mi++){const i=S.modules[mi].domains.findIndex(p=>p.id===id);if(i>=0)return{mi,i,p:S.modules[mi].domains[i],where:'mod'}}
+  const i=S.trans.findIndex(p=>p.id===id);if(i>=0)return{i,p:S.trans[i],where:'lane'};return null}
+function detach(id){const f=findPiece(id);if(!f)return null;
+  if(f.where==='lane'){S.trans.splice(f.i,1);return f.p}
+  const m=S.modules[f.mi];m.domains.splice(f.i,1);if(!m.domains.length)S.modules.splice(f.mi,1);return f.p}
+function removePiece(id){detach(id);if(sel>=S.modules.length)sel=-1;commit()}
+function moveMod(mi,dx){const j=mi+dx;if(j<0||j>=S.modules.length)return;[S.modules[mi],S.modules[j]]=[S.modules[j],S.modules[mi]];sel=j;commit()}
+function pieceFromPayload(pl){return pl.src==='pal'?newPiece(pl.type,pl.cls):pl.piece}
+function addByClick(type,cls){
+  const p=newPiece(type,cls);
+  if(type==='tAT'){S.trans.push(p)}
+  else if(sel>=0&&S.modules[sel])S.modules[sel].domains.push(p);
+  else{S.modules.push(newMod([p]));sel=S.modules.length-1}
+  commit();
+}
+function commit(){
+  normalize();
+  try{hist=hist.slice(0,hi+1);hist.push(JSON.stringify({S,sel}));if(hist.length>80)hist.shift();hi=hist.length-1}catch(e){}
+  refresh();
+}
+function undo(){if(hi>0){hi--;const o=JSON.parse(hist[hi]);S=o.S;sel=o.sel;view='final';refresh()}}
+function redo(){if(hi<hist.length-1){hi++;const o=JSON.parse(hist[hi]);S=o.S;sel=o.sel;view='final';refresh()}}
+function refresh(){
+  normalize();SIM=simulate(S);
+  if(typeof view==='number'&&!(SIM.steps[view]&&SIM.steps[view].snap))view='final';
+  renderBoard();renderViewer();renderDrawer();
+  $('#bUndo').disabled=hi<=0;$('#bRedo').disabled=hi>=hist.length-1;
+  try{localStorage.setItem('alsb.v1',JSON.stringify({S,lang,nums:showNums}))}catch(e){}
+}
+
+/* ====================================================================
+   drag and drop (pointer events)
+   ==================================================================== */
+let dragging=false;
+function startDrag(e,pl,srcEl){
+  if(e.pointerType==='mouse'&&e.button!==0)return;
+  const sx=e.clientX,sy=e.clientY;let started=false,ghost=$('#ghost'),target=null;
+  const typeCls=pl.cls;
+  const begin=()=>{
+    started=true;dragging=true;document.body.style.userSelect='none';try{getSelection().removeAllRanges()}catch(_){}
+    ghost.replaceChildren(domEl(pl.type,typeCls));ghost.hidden=false;
+    if(pl.src!=='pal'){srcEl.classList.add('ghosted');$('#palette').classList.add('trash')}
+  };
+  const hit=(x,y)=>{
+    const els=document.elementsFromPoint(x,y);
+    const g=els.find(n=>n.classList&&n.classList.contains('gap'));if(g)return{kind:'gap',gi:+g.dataset.gi,node:g};
+    const m=els.find(n=>n.classList&&n.classList.contains('mod'));if(m)return{kind:'mod',mi:+m.dataset.mi,node:m};
+    const l=els.find(n=>n.id==='lane');if(l)return{kind:'lane',node:l};
+    const bw=els.find(n=>n.id==='boardWrap');if(bw)return{kind:'board',node:bw};
+    const pal=els.find(n=>n.id==='palette');if(pal)return{kind:'pal',node:pal};
+    return{kind:'none'};
+  };
+  const insIndex=(t,x)=>{const m=S.modules[t.mi];const pcs=$$('.pc',t.node);let idx=m.domains.length;
+    for(let i=0;i<pcs.length;i++){const r=pcs[i].getBoundingClientRect();if(x<r.left+r.width/2){idx=i;break}}
+    return idx};
+  const verdict=t=>{
+    if(t.kind==='pal')return pl.src==='pal'?false:true;
+    if(pl.type==='tAT')return['gap','mod','lane','board'].includes(t.kind);
+    return['gap','mod','board'].includes(t.kind);
+  };
+  const clear=()=>{$$('.drop-ok,.drop-bad').forEach(n=>n.classList.remove('drop-ok','drop-bad'));$$('.ins-before').forEach(n=>n.classList.remove('ins-before'));$$('.ins-end').forEach(n=>n.classList.remove('ins-end'))};
+  let lastX=sx,lastY=sy,scr=null;
+  const autoScroll=()=>{const bw=$('#boardWrap'),r=bw.getBoundingClientRect();if(lastY>r.top-24&&lastY<r.bottom+24){if(lastX<r.left+56)bw.scrollLeft-=22;else if(lastX>r.right-56)bw.scrollLeft+=22}};
+  const move=ev=>{
+    lastX=ev.clientX;lastY=ev.clientY;if(started&&!scr)scr=setInterval(autoScroll,30);
+    if(!started){if(Math.hypot(ev.clientX-sx,ev.clientY-sy)<5)return;begin()}
+    ghost.style.left=ev.clientX+'px';ghost.style.top=ev.clientY+'px';
+    clear();target=hit(ev.clientX,ev.clientY);
+    const ok=verdict(target);
+    if(target.kind==='mod'){target.node.classList.add(ok?'drop-ok':'drop-bad');
+      if(ok){const idx=insIndex(target,ev.clientX),pcs=$$('.pc',target.node);if(idx<pcs.length)pcs[idx].classList.add('ins-before');else $('.mdom',target.node).classList.add('ins-end');target.idx=idx}}
+    else if(target.kind==='gap'&&ok)target.node.classList.add('drop-ok');
+    else if(target.kind==='board'&&ok&&pl.type!=='tAT'){const lg=$('.gap.last');if(lg)lg.classList.add('drop-ok')}
+    else if(target.kind==='lane'||(target.kind==='board'&&pl.type==='tAT')){const ln=$('#lane');ln.classList.add(ok?'drop-ok':'drop-bad')}
+    else if(target.kind==='lane')$('#lane').classList.add('drop-bad');
+    if(target.kind==='lane'&&pl.type!=='tAT')$('#lane').classList.add('drop-bad');
+  };
+  const up=ev=>{
+    window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);clearInterval(scr);
+    if(!started){if(pl.src==='pal')addByClick(pl.type,pl.cls);else if(pl.src!=='pal'){const f=findPiece(pl.id);if(f&&f.where==='mod'){sel=f.mi;renderBoard()}}return}
+    dragging=false;document.body.style.userSelect='';ghost.hidden=true;clear();srcEl.classList.remove('ghosted');$('#palette').classList.remove('trash');
+    const t=ev.type==='pointercancel'?{kind:'none'}:hit(ev.clientX,ev.clientY);
+    if(t.kind==='mod')t.idx=insIndex(t,ev.clientX);
+    drop(pl,t);
+  };
+  window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
+}
+function drop(pl,t){
+  if(t.kind==='pal'){if(pl.src!=='pal'){removePiece(pl.id)}return}
+  if(t.kind==='none'){return}
+  const isT=pl.type==='tAT';
+  if(t.kind==='board'&&!isT)t={kind:'gap',gi:S.modules.length};
+  if(isT){
+    if(!['gap','mod','lane','board'].includes(t.kind))return;
+    if(pl.src==='pal'){S.trans.push(newPiece('tAT',pl.cls))}
+    commit();return;
+  }
+  if(t.kind==='lane'){toast(L({en:'Only a free-standing trans-AT protein goes in the discrete-enzyme lane. Drop domains onto a module.',vi:'Chỉ protein trans-AT rời mới đặt ở làn enzyme rời. Hãy thả domain vào module.'}));return}
+  // resolve anchors by id before detaching
+  const beforeId=t.kind==='gap'?(S.modules[t.gi]?S.modules[t.gi].id:null):null;
+  const modId=t.kind==='mod'?S.modules[t.mi].id:null;
+  let idxInMod=t.idx;
+  let p;
+  if(pl.src==='pal')p=newPiece(pl.type,pl.cls);
+  else{
+    if(t.kind==='mod'){const f=findPiece(pl.id);if(f&&f.where==='mod'&&S.modules[f.mi].id===modId&&f.i<idxInMod)idxInMod--}
+    p=detach(pl.id);if(!p)return;
+  }
+  if(t.kind==='gap'){
+    const bi=beforeId?S.modules.findIndex(m=>m.id===beforeId):S.modules.length;
+    S.modules.splice(bi<0?S.modules.length:bi,0,newMod([p]));sel=bi<0?S.modules.length-1:bi;
+  }else{
+    const mi=S.modules.findIndex(m=>m.id===modId);
+    if(mi<0){S.modules.push(newMod([p]));sel=S.modules.length-1}
+    else{S.modules[mi].domains.splice(Math.max(0,Math.min(idxInMod,S.modules[mi].domains.length)),0,p);sel=mi}
+  }
+  commit();
+}
+
+/* ====================================================================
+   misc ui
+   ==================================================================== */
+let toastT=null;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3600)}
+function applyLang(){
+  document.documentElement.lang=lang;
+  $$('[data-i]').forEach(n=>n.textContent=tr(n.dataset.i));
+  $('#lEn').setAttribute('aria-pressed',String(lang==='en'));$('#lVi').setAttribute('aria-pressed',String(lang==='vi'));
+  document.title=tr('title');
+  renderPalette();if(SIM)refreshViews();
+  try{prLabels();prRender()}catch(e){}
+  try{const pd=$('#pdrawer');if(pd&&pd.classList.contains('on'))pdBuild()}catch(e){}
+}
+function svgText(){const s=$('#canvas svg');if(!s)return null;const c=s.cloneNode(true);c.removeAttribute('style');c.setAttribute('width',Math.round(s.viewBox.baseVal.width*1.4));c.setAttribute('height',Math.round(s.viewBox.baseVal.height*1.4));
+  return'<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"'+c.outerHTML.slice(c.outerHTML.indexOf(' ',4)).replace(/^ xmlns="[^"]+"/,'').replace(/^/,'')}
+
+$('#bEx').onclick=()=>$('#drawer').classList.toggle('on');
+$('#bUndo').onclick=undo;$('#bRedo').onclick=redo;
+$('#bClear').onclick=()=>{S={modules:[],trans:[]};sel=-1;view='final';commit()};
+$('#cNum').onchange=e=>{showNums=e.target.checked;renderViewer();try{localStorage.setItem('alsb.v1',JSON.stringify({S,lang,nums:showNums}))}catch(_){}};
+$('#lEn').onclick=()=>{lang='en';applyLang()};$('#lVi').onclick=()=>{lang='vi';applyLang()};
+$('#bCopy').onclick=async()=>{const t=svgText();if(!t)return;try{await navigator.clipboard.writeText(t);toast(tr('copied'))}catch(e){toast(tr('saveFail'))}};
+window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey&&!/INPUT|SELECT/.test(document.activeElement.tagName)){e.preventDefault();undo()}
+  if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo()}});
+window.addEventListener('resize',()=>requestAnimationFrame(drawLinks));
+$('#boardWrap').addEventListener('click',e=>{if(e.target.id==='boardWrap'||e.target.id==='board'||e.target.id==='line'){sel=-1;renderBoard()}});
+
+/* ====================================================================
+   structure -> assembly line : parser, retro-analysis, editor, panel
+   ==================================================================== */
+const h53=(str)=>{let h1=0xdeadbeef,h2=0x41c6ce57;for(let i=0;i<str.length;i++){const ch=str.charCodeAt(i);h1=Math.imul(h1^ch,2654435761);h2=Math.imul(h2^ch,1597334677)}
+  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);return(4294967296*(2097151&h2)+(h1>>>0)).toString(36)};
+const VALS={C:[4],N:[3,5],O:[2],S:[2,4,6],P:[3,5],F:[1],Cl:[1],Br:[1],I:[1],B:[3],Se:[2,4]};
+const FR={Gly:'',Ala:'C',Val:'C(C)C',Leu:'CC(C)C',Ile:'C(C)CC',Phe:'Cc1ccccc1',Tyr:'Cc1ccc(O)cc1',Ser:'CO',Thr:'C(C)O',Cys:'CS',Asp:'CC(=O)O',Glu:'CCC(=O)O'};
+
+function adjOf(g){const adj=g.a.map(()=>[]);g.b.forEach(([x,y,o],bi)=>{adj[x].push({j:y,o,bi});adj[y].push({j:x,o,bi})});return adj}
+function fixH(g){const sum=g.a.map(()=>0);g.b.forEach(([x,y,o])=>{sum[x]+=o;sum[y]+=o});
+  g.a.forEach((a,i)=>{if(!a.imp)return;const s=Math.ceil(sum[i]-1e-9),vs=VALS[a.el]||[4];let v=vs.find(v=>v>=s);if(v==null)v=s;a.h=(a.arom&&a.el!=='C')?0:v-s})}
+function graphFormula(g){const F={};g.a.forEach(a=>{F[a.el]=(F[a.el]||0)+1;if(a.h)F.H=(F.H||0)+a.h});
+  const ord=['C','H',...Object.keys(F).filter(k=>!'CH'.includes(k)).sort()];return ord.filter(k=>F[k]).map(k=>k+(F[k]>1?F[k]:'')).join('')}
+
+/* ---------- SMILES ---------- */
+function parseSMILES(src){
+  const s=String(src).trim().split(/\s+/)[0];if(!s)throw new Error('empty');
+  const g={a:[],b:[]};let prev=-1,bond=null;const stack=[],ring={};let i=0;
+  const add=(el_,arom,h,imp,chg)=>{g.a.push({el:el_,arom,h,imp,chg:chg||0});const k=g.a.length-1;
+    if(prev>=0)g.b.push([prev,k,bond!=null?bond:(arom&&g.a[prev].arom?1.5:1)]);bond=null;prev=k;return k};
+  while(i<s.length){
+    const c=s[i];
+    if(c==='('){stack.push(prev);i++;continue}
+    if(c===')'){if(!stack.length)throw new Error('unbalanced )');prev=stack.pop();i++;continue}
+    if(c==='.'){prev=-1;bond=null;i++;continue}
+    if(c==='-'){bond=1;i++;continue}if(c==='='){bond=2;i++;continue}if(c==='#'){bond=3;i++;continue}if(c===':'){bond=1.5;i++;continue}
+    if(c==='/'||c==='\\'){i++;continue}
+    if(c==='['){
+      const j=s.indexOf(']',i);if(j<0)throw new Error('missing ]');
+      const m=/^(\d*)([A-Za-z][a-z]?)(@*)(?:H(\d*))?([+-]+\d*)?(?::\d+)?$/.exec(s.slice(i+1,j));if(!m)throw new Error('bad atom '+s.slice(i,j+1));
+      let sym=m[2];const arom=sym[0]===sym[0].toLowerCase();sym=sym[0].toUpperCase()+sym.slice(1);
+      if(sym==='H'){i=j+1;continue}
+      let chg=0;if(m[5]){const sg=m[5][0]==='+'?1:-1;chg=m[5].length>1&&/^[+-]+$/.test(m[5])?sg*m[5].length:(m[5].length>1?sg*parseInt(m[5].slice(1)):sg)}
+      add(sym,arom,m[4]===undefined?(m[0].includes('H')?1:0):(m[4]===''?1:parseInt(m[4])),false,chg);i=j+1;continue;
+    }
+    if(/[0-9%]/.test(c)){
+      let lab;if(c==='%'){lab=s.slice(i+1,i+3);i+=3}else{lab=c;i++}
+      if(prev<0)throw new Error('ring label without atom');
+      if(ring[lab]){const r=ring[lab];delete ring[lab];const o=bond!=null?bond:(r.bond!=null?r.bond:(g.a[r.k].arom&&g.a[prev].arom?1.5:1));g.b.push([r.k,prev,o]);bond=null}
+      else{ring[lab]={k:prev,bond};bond=null}
+      continue;
+    }
+    const m=/^(Cl|Br|[BCNOPSFI]|[bcnops])/.exec(s.slice(i));
+    if(m){const t=m[1];const arom=t[0]===t[0].toLowerCase();add(t[0].toUpperCase()+t.slice(1),arom,0,true,0);i+=t.length;continue}
+    throw new Error('unexpected "'+c+'"');
+  }
+  if(Object.keys(ring).length)throw new Error('unclosed ring');
+  if(stack.length)throw new Error('unbalanced (');
+  fixH(g);return g;
+}
+/* ---------- molfile (V2000) ---------- */
+function parseMol(txt){
+  const Ls=String(txt).replace(/\r/g,'').split('\n');const cl=Ls[3]||'';
+  const na=parseInt(cl.slice(0,3)),nb=parseInt(cl.slice(3,6));if(!(na>0))throw new Error('no atom block');
+  const g={a:[],b:[]};
+  for(let i=0;i<na;i++){const l=Ls[4+i]||'';const sym=l.slice(31,34).trim();
+    if(!sym)throw new Error('bad atom line '+(i+1));
+    g.a.push({el:sym[0].toUpperCase()+sym.slice(1).toLowerCase(),h:0,imp:true,chg:0,x:parseFloat(l.slice(0,10)),y:-parseFloat(l.slice(10,20))})}
+  for(let i=0;i<nb;i++){const l=Ls[4+na+i]||'';const x=parseInt(l.slice(0,3))-1,y=parseInt(l.slice(3,6))-1,t=parseInt(l.slice(6,9));
+    if(!(x>=0&&y>=0&&x<na&&y<na))throw new Error('bad bond line '+(i+1));g.b.push([x,y,t===4?1.5:(t>=1&&t<=3?t:1)])}
+  return dropH(g);
+}
+function dropH(g){
+  const keep=g.a.map(a=>a.el!=='H'),map=[];let k=0;g.a.forEach((a,i)=>{map[i]=keep[i]?k++:-1});
+  const o={a:g.a.filter((a,i)=>keep[i]).map(a=>({...a})),b:[]};
+  g.b.forEach(([x,y,t])=>{if(map[x]>=0&&map[y]>=0)o.b.push([map[x],map[y],t])});
+  if(o.a.some(a=>a.imp))fixH(o);return o;
+}
+/* ---------- graph utilities ---------- */
+function aromatize(g){
+  const adj=adjOf(g),seen=new Set(),rings=[];
+  const ok=i=>(g.a[i].el==='C'||g.a[i].el==='N')&&adj[i].length<=3;
+  g.a.forEach((a,s)=>{if(!ok(s))return;
+    const path=[s];
+    const dfs=(u)=>{if(path.length===6){if(adj[u].some(e=>e.j===s)){const key=path.slice().sort((x,y)=>x-y).join(',');if(!seen.has(key)){seen.add(key);rings.push(path.slice())}}return}
+      for(const e of adj[u]){if(e.j<=s&&e.j!==s)continue;if(e.j===s||path.includes(e.j)||!ok(e.j))continue;path.push(e.j);dfs(e.j);path.pop()}};
+    dfs(s)});
+  const todo=[];
+  rings.forEach(r=>{const ord=r.map((x,i)=>{const y=r[(i+1)%6];const e=adj[x].find(e=>e.j===y);return e?e.o:0});
+    if(ord.every(o=>o>0)&&(ord.every((o,i)=>o===(i%2?2:1))||ord.every((o,i)=>o===(i%2?1:2))))todo.push(r)});
+  todo.forEach(r=>r.forEach((x,i)=>{const y=r[(i+1)%6];const e=adj[x].find(e=>e.j===y);g.b[e.bi][2]=1.5;g.a[x].arom=g.a[y].arom=true}));
+  if(todo.length)fixH(g);
+}
+function prep(g0){
+  let g={a:g0.a.map(a=>({...a})),b:g0.b.map(b=>b.slice())};
+  g=dropH(g);
+  // largest connected component
+  const adj=adjOf(g),comp=g.a.map(()=>-1);let best=[],nc=0;
+  g.a.forEach((a,s)=>{if(comp[s]>=0)return;const q=[s];comp[s]=nc;const mem=[];while(q.length){const u=q.pop();mem.push(u);adj[u].forEach(e=>{if(comp[e.j]<0){comp[e.j]=nc;q.push(e.j)}})}nc++;if(mem.length>best.length)best=mem});
+  if(nc>1){const set=new Set(best),map={};let k=0;best.sort((x,y)=>x-y).forEach(i=>map[i]=k++);
+    g={a:best.map(i=>g.a[i]),b:g.b.filter(([x,y])=>set.has(x)&&set.has(y)).map(([x,y,o])=>[map[x],map[y],o])}}
+  fixH(g);aromatize(g);return g;
+}
+function wlKey(g,subset,marks){
+  const idx=subset||g.a.map((_,i)=>i),inS=new Set(idx),nb={};idx.forEach(i=>nb[i]=[]);let nbond=0;
+  g.b.forEach(([x,y,o])=>{if(inS.has(x)&&inS.has(y)){nb[x].push([y,o]);nb[y].push([x,o]);nbond++}});
+  let col={};idx.forEach(i=>{const a=g.a[i];col[i]=h53(a.el+'|'+a.h+'|'+(a.chg||0)+'|'+nb[i].length+'|'+(marks&&marks[i]?'M':''))});
+  for(let it=0;it<10;it++){const nc={};idx.forEach(i=>{nc[i]=h53(col[i]+'#'+nb[i].map(([j,o])=>o+':'+col[j]).sort().join(','))});col=nc}
+  return idx.map(i=>col[i]).sort().join('|')+'/'+idx.length+'/'+nbond;
+}
+const graphKey=g=>wlKey(g,null,null);
+/* ---------- product snapshot -> SMILES -> graph ---------- */
+function snapToSMILES(snap){
+  const A=snap.atoms,n=A.length,rel=snap.rel||{kind:'acid'};const cup={};
+  A.forEach((a,k)=>{if(a.ring)cup[k+2]=true});
+  let out='';
+  for(let i=n-1;i>=0;i--){
+    const a=A[i];let s=a.el;
+    if(cup[i])s+='%12';
+    if(rel.kind==='lactam'&&(i===0||i===rel.idx))s+='%11';
+    if(rel.kind==='lactone'&&i===rel.idx)s+='%11';
+    if(i===0){s+='(=O)';s+=rel.kind==='lactone'?'O%11':rel.kind==='lactam'?'':'O';}
+    else{
+      if(a.o==='O')s+='(=O)';
+      else if(a.o==='OH'&&!(rel.kind==='lactone'&&i===rel.idx))s+='(O)';
+    }
+    (a.subs||[]).forEach(sb=>{const b=sb.replace('!','');s+=b==='Me'?'(C)':b==='Et'?'(CC)':''});
+    if(a.aa){
+      if(a.ring){s+=a.aa==='Cys'?'(CS%12)':a.aa==='Ser'?'(CO%12)':'(C(C)O%12)'}
+      else if(FR[a.aa])s+='('+FR[a.aa]+')';
+    }
+    out+=s;
+    if(i>0&&A[i-1].dbl)out+='=';
+  }
+  return out;
+}
+const snapToGraph=snap=>parseSMILES(snapToSMILES(snap));
+/* ---------- graph -> SMILES (editor) ---------- */
+function writeSMILES(g){
+  const n=g.a.length;if(!n)return'';const adj=adjOf(g),seen=Array(n).fill(false),usedE=new Set(),clos=g.a.map(()=>[]),kids=g.a.map(()=>[]);let lab=0;const roots=[];
+  const visit=(u,pe)=>{seen[u]=true;for(const e of adj[u]){if(e.bi===pe||usedE.has(e.bi))continue;usedE.add(e.bi);
+    if(seen[e.j]){const k=++lab;clos[u].push({k,o:e.o,open:false});clos[e.j].push({k,o:e.o,open:true})}else{kids[u].push(e);visit(e.j,e.bi)}}};
+  const sym=a=>a.chg||a.el.length>1&&!['Cl','Br'].includes(a.el)?'['+a.el+']':a.el;
+  const emit=(u)=>{
+    let s=sym(g.a[u]);
+    clos[u].forEach(c=>{s+=(c.open&&c.o===2?'=':c.open&&c.o===3?'#':'')+(c.k<10?c.k:'%'+c.k)});
+    const ks=kids[u];ks.forEach((e,i)=>{const b=(e.o===2?'=':e.o===3?'#':'')+emit(e.j);s+=i<ks.length-1?'('+b+')':b});
+    return s;};
+  const parts=[];for(let s=0;s<n;s++)if(!seen[s]){visit(s,-1);parts.push(emit(s))}
+  return parts.join('.');
+}
+
+/* ====================================================================
+   retro-analysis
+   ==================================================================== */
+const AAKEY={};
+function aaKey(aa){if(AAKEY[aa]!=null)return AAKEY[aa];const h=parseSMILES('C'+FR[aa]);return AAKEY[aa]=wlKey(h,h.a.map((_,i)=>i).slice(1),{1:1})}
+const AA_FIT=Object.keys(FR).filter(k=>k!=='Gly');
+const TAILSUB={ace:'ace',pro:'pro',but:'but',iso:'iso'};
+
+function retro(g){
+  const adj=adjOf(g),A=g.a,N=A.length;
+  const fails=[];const why=(d,en,vi)=>fails.push({d,en,vi});
+  const isC=i=>A[i].el==='C',deg=i=>adj[i].length;
+  const leaf=(i)=>deg(i)===1;
+  let T=null;
+  function compOf(root,block,cap){const seen=new Set(block);seen.add(root);const q=[root],mem=[root];
+    while(q.length){const u=q.pop();for(const e of adj[u]){if(!seen.has(e.j)){seen.add(e.j);q.push(e.j);mem.push(e.j);if(mem.length>cap)return null}}}return mem}
+  function matchAA(c,scRoot){
+    if(scRoot==null)return{aa:'Gly',atoms:[]};
+    const comp=compOf(scRoot,[c],12);if(!comp)return null;
+    const k=wlKey(g,comp,{[scRoot]:1});
+    const aa=AA_FIT.find(a=>aaKey(a)===k);return aa?{aa,atoms:comp}:null;
+  }
+  function tail(c,cur){
+    if(!isC(c)||adj[c].some(e=>e.o!==1))return null;
+    const nb=adj[c].filter(e=>e.j!==cur);
+    if(nb.length===0)return{k:'ace',atoms:[c],cc:[c]};
+    if(nb.length===1){const x=nb[0].j;if(!isC(x)||adj[x].some(e=>e.o!==1))return null;
+      if(deg(x)===1)return{k:'pro',atoms:[c,x],cc:[c,x]};
+      if(deg(x)===2){const y=adj[x].find(e=>e.j!==c).j;if(isC(y)&&leaf(y))return{k:'but',atoms:[c,x,y],cc:[c,x,y]}}
+      return null}
+    if(nb.length===2){const [p,q]=nb.map(e=>e.j);
+      if(isC(p)&&isC(q)&&leaf(p)&&leaf(q))return{k:'iso',atoms:[c,p,q],cc:[c,p]};
+      const oo=[p,q].find(x=>A[x].el==='O'&&(leaf(x)||(T&&T.O===x))),cc=[p,q].find(x=>isC(x)&&leaf(x));
+      if(oo!=null&&cc!=null)return{k:'lac',atoms:[c,oo,cc],cc:[c,cc],ring:!leaf(oo)}}
+    return null;
+  }
+  function subst(r,from,o){
+    if(o!==1||!isC(r))return null;
+    if(leaf(r))return{k:'Me',atoms:[r]};
+    if(deg(r)===2){const x=adj[r].find(e=>e.j!==from);if(x&&x.o===1&&isC(x.j)&&leaf(x.j))return{k:'Et',atoms:[r,x.j]}}
+    return null;
+  }
+  function down(cur,prev,st){
+    const out=[],cov=[cur],seen=new Set(st.seen);seen.add(cur);
+    const oD=[],oS=[],cN=[],cC=[];
+    for(const e of adj[cur]){
+      if(e.j===prev||(st.skip&&st.skip.has(e.j)))continue;
+      const el_=A[e.j].el;
+      if(el_==='O')(e.o===2?oD:oS).push(e.j);
+      else if(el_==='C')cC.push(e);
+      else if(el_==='N')cN.push(e);
+    }
+    let state;const U={c1:cur,idx:st.idx};
+    if(st.kind==='top'){
+      if(!oD.length){why(0,'No carbonyl on the first carbon.','Carbon đầu không có carbonyl.');return[]}
+      cov.push(oD[0]);
+      if(oS.length){const x=oS[0];cov.push(x);
+        if(deg(x)===1)U.rel={kind:'acid'};
+        else{const r=adj[x].find(e=>e.j!==cur);U.rel={kind:'lactone?',O:x,r:r.j};T={O:x}}}
+      else if(cN.length){U.rel={kind:'lactam?',N:cN[0].j};T={N:cN[0].j,c1:cur}}
+      else{why(0,'The carbonyl carbon is not an acid, ester or lactam.','Carbon carbonyl không phải acid, ester hay lactam.');return[]}
+      state='top';
+    }else if(st.kind==='amide'){
+      if(!oD.length){why(st.idx,'An amide carbonyl (C=O) is expected here.','Ở đây cần carbonyl amide (C=O).');return[]}
+      cov.push(oD[0]);state='amide';
+    }else if(st.kind==='cy'){state='cy'}
+    else{
+      if(st.order===2){if(oD.length||oS.length){why(st.idx,'A C=C bearing an oxygen is not made by KR/DH/ER.','C=C mang oxy không do KR/DH/ER tạo ra.');return[]}state='ene'}
+      else if(oD.length){state='ketone';cov.push(oD[0])}
+      else if(oS.length){state='oh';let x=oS[0];if(T&&T.O!=null&&oS.includes(T.O)){x=T.O;U.lacIdx=st.idx}cov.push(x)}
+      else state='ch2';
+    }
+    U.state=state;
+    for(const ce of cC){
+      if(ce.o!==1||seen.has(ce.j))continue;const c=ce.j;
+      // --- starter end
+      const tl=tail(c,cur);
+      if(tl)out.push({units:[{t:'st',...U,ca:c,tail:tl.k,tailC:tl.cc,lacIdx:tl.ring?st.idx+1:U.lacIdx}],cov:[...cov,...tl.atoms],pen:0});
+      // --- NRPS residue
+      for(const ne of adj[c]){
+        if(ne.j===cur||A[ne.j].el!=='N'||ne.o!==1)continue;const nn=ne.j;
+        const sc=adj[c].filter(x=>x.j!==cur&&x.j!==nn);
+        const nrest=adj[nn].filter(x=>x.j!==c);
+        const variants=[];
+        for(const x of nrest){
+          if(T&&T.N===nn&&x.j===T.c1)variants.push({k:'lactam'});
+          else if(isC(x.j)&&x.o===1&&!seen.has(x.j))variants.push({k:'amide',c2:x.j});
+          else if(isC(x.j)&&x.o===2&&!seen.has(x.j))variants.push({k:'cy',c2:x.j});
+        }
+        if(!nrest.length||!variants.length)variants.push({k:'end'});
+        for(const v of variants){
+          let aaR=null,extraCov=[],skip=null;
+          if(v.k==='cy'){
+            if(sc.length!==1)continue;const cb=sc[0].j;
+            const ys=adj[v.c2].filter(x=>x.o===1&&(A[x.j].el==='S'||A[x.j].el==='O')&&adj[x.j].some(z=>z.j===cb));
+            if(!ys.length||!adj[cb].some(z=>z.j===c))continue;const y=ys[0].j;
+            const cbN=adj[cb].filter(z=>z.j!==c&&z.j!==y);
+            if(A[y].el==='S'&&cbN.length===0&&deg(cb)===2)aaR={aa:'Cys'};
+            else if(A[y].el==='O'&&cbN.length===0&&deg(cb)===2)aaR={aa:'Ser'};
+            else if(A[y].el==='O'&&cbN.length===1&&isC(cbN[0].j)&&leaf(cbN[0].j))aaR={aa:'Thr'};
+            else continue;
+            extraCov=[cb,y,...cbN.map(z=>z.j)];skip=new Set([y]);
+          }else{
+            const m=sc.length===0?matchAA(c,null):sc.length===1?matchAA(c,sc[0].j):null;
+            if(!m){why(st.idx+1,'The side chain on this α-carbon is not one of the 12 amino acids in the sandbox (Gly, Ala, Val, Leu, Ile, Phe, Tyr, Ser, Thr, Cys, Asp, Glu).','Chuỗi bên ở carbon α này không thuộc 12 amino acid của sandbox (Gly, Ala, Val, Leu, Ile, Phe, Tyr, Ser, Thr, Cys, Asp, Glu).');continue}
+            aaR=m;extraCov=m.atoms;
+          }
+          const u={t:'nr',...U,ca:c,n:nn,aa:aaR.aa,cy:v.k==='cy',lactamN:v.k==='lactam'};
+          const base=[...cov,c,nn,...extraCov];
+          if(v.k==='end'||v.k==='lactam'){out.push({units:[u],cov:base,pen:v.k==='end'&&nrest.length?1:0});continue}
+          const kids=down(v.c2,nn,{kind:v.k,idx:st.idx+3,seen:new Set([...seen,c,nn]),skip});
+          kids.forEach(ch=>out.push({units:[u,...ch.units],cov:[...base,...ch.cov],pen:ch.pen}));
+        }
+      }
+      // --- polyketide extension
+      const nbs=adj[c].filter(x=>x.j!==cur&&!seen.has(x.j));
+      for(const b of nbs){
+        if(!isC(b.j)||(b.o!==1&&b.o!==2))continue;
+        const rem=nbs.filter(x=>x!==b);const subs=[],covS=[];let pen=0;
+        rem.forEach(r=>{const s=subst(r.j,c,r.o);if(s&&subs.length<2&&!(s.k==='Et'&&subs.includes('Et'))){subs.push(s.k);covS.push(...s.atoms)}else pen++});
+        const kids=down(b.j,c,{kind:'beta',idx:st.idx+2,order:b.o,seen:new Set([...seen,c])});
+        kids.forEach(ch=>out.push({units:[{t:'pk',...U,ca:c,subs},...ch.units],cov:[...cov,c,...covS,...ch.cov],pen:pen+ch.pen}));
+      }
+    }
+    if(!out.length&&!fails.length)why(st.idx,'The chain stops being a polyketide/peptide pattern here.','Chuỗi không còn khớp mô hình polyketide/peptide ở đây.');
+    return out;
+  }
+  // candidate first carbons
+  const alts=[];
+  for(let c=0;c<N;c++){
+    if(!isC(c))continue;
+    if(!adj[c].some(e=>e.o===2&&A[e.j].el==='O'))continue;
+    if(!adj[c].some(e=>e.o===1&&(A[e.j].el==='O'||A[e.j].el==='N')))continue;
+    T=null;
+    const res=down(c,-1,{kind:'top',idx:0,seen:new Set()});
+    res.forEach(r=>{r.top=r.units[0].rel;r.T=T;alts.push(r)});
+  }
+  return{alts,fails,adj};
+}
+
+/* ---------- from a parse to an assembly line ---------- */
+function relOf(alt){
+  const first=alt.units[0],r=first.rel;
+  if(r.kind==='acid')return{kind:'acid'};
+  if(r.kind==='lactone?'){const u=alt.units.find(u=>u.lacIdx!=null);return u?{kind:'lactone',idx:u.lacIdx}:{kind:'acid'}}
+  if(r.kind==='lactam?'){const u=alt.units.find(u=>u.lactamN);return u?{kind:'lactam',idx:u.idx+2}:null}
+  return{kind:'acid'};
+}
+function extSub(subs){
+  const s=subs.slice().sort();
+  if(s.length===0)return{sub:'mal',mt:false};
+  if(s.length===1)return{sub:s[0]==='Et'?'emal':'mmal',mt:false};
+  return{sub:s.includes('Et')?'emal':'mmal',mt:true};
+}
+function buildLine(alt,rel,mode,opt){
+  const trans=mode==='trans',bt=alt.units.slice().reverse();
+  const tats=[];const mods=[],meta=[];
+  const tatFor=sub=>{let i=tats.findIndex(t=>t.opts.sub===sub);if(i<0){tats.push(newPiece('tAT','trans',{sub}));i=tats.length-1}return i};
+  const kc=trans?'trans':'cis';
+  bt.forEach((u,k)=>{
+    const below=bt[k-1];let m;
+    if(u.t==='st'){
+      if(u.tail==='lac')m=newMod([newPiece('GTP','trans'),newPiece('ACP','trans')]);
+      else if(trans){m=newMod([newPiece('ACP','trans')]);m.atSrc=tatFor(u.tail)}
+      else m=newMod([newPiece('AT','cis',{sub:u.tail}),newPiece('ACP','cis')]);
+    }else if(u.t==='pk'){
+      const e=extSub(u.subs),st=below?below.state:'ketone';
+      const D=[newPiece('KS',kc)];if(!trans)D.push(newPiece('AT','cis',{sub:e.sub}));
+      if(e.mt)D.push(newPiece('MT',kc));
+      if(st==='ene'||st==='ch2')D.push(newPiece('DH',kc));
+      if(st==='ch2')D.push(newPiece('ER',kc));
+      if(st!=='ketone')D.push(newPiece('KR',kc));
+      D.push(newPiece('ACP',kc));
+      m=newMod(D);if(trans)m.atSrc=tatFor(e.sub);
+    }else{
+      const D=[];if(k>0)D.push(newPiece(u.cy?'Cy':'C','nrps'));
+      D.push(newPiece('A','nrps',{aa:u.aa}),newPiece('T','nrps'));m=newMod(D);
+    }
+    mods.push(m);meta.push({u,below,n:1});
+  });
+  if(opt&&opt.merge){
+    const sig=(m,mt)=>mt.u.t==='pk'?m.domains.map(d=>d.type+(d.opts.sub||'')).join('.')+'@'+m.atSrc:null;
+    for(let i=mods.length-1;i>0;i--){const a=sig(mods[i],meta[i]),b=sig(mods[i-1],meta[i-1]);
+      if(a&&a===b){mods[i-1].iter=(mods[i-1].iter||1)+(mods[i].iter||1);meta[i-1].n+=meta[i].n;meta[i-1].top=meta[i].top||meta[i].u;mods.splice(i,1);meta.splice(i,1)}}
+  }
+  const last=mods[mods.length-1];
+  last.domains.push(newPiece('TE','rel',rel.kind==='acid'?{mode:'hydro'}:{mode:'cyc',nuc:rel.idx}));
+  return{S:{modules:mods,trans:tats},meta};
+}
+/* ---------- numbering & explanations ---------- */
+function chainList(units){const l=[];units.forEach(u=>{if(u.t==='st')l.push(u.c1,...u.tailC);else if(u.t==='pk')l.push(u.c1,u.ca);else l.push(u.c1,u.ca,u.n)});return l}
+function carbonNumbers(units){
+  const num=new Map();let c=0;
+  units.forEach(u=>{
+    if(u.t==='st'){num.set(u.c1,++c);u.tailC.forEach(a=>num.set(a,++c));u.tailTo=c}
+    else{num.set(u.c1,++c);num.set(u.ca,++c)}
+  });
+  return num;
+}
+const SUBNAME={ace:'acetyl',pro:'propionyl',but:'butyryl',iso:'isobutyryl',lac:'lactyl (GT/P)',mal:'malonyl',mmal:'methylmalonyl',emal:'ethylmalonyl'};
+function explain(alt,rel,res,mode,meta){
+  const num=carbonNumbers(alt.units),notes=[];
+  const cn=u=>num.get(u.c1);
+  const out=[];
+  meta.forEach((mt,mi)=>{
+    const u=mt.u,below=mt.below,lines=[];
+    let head;
+    if(u.t==='st'){
+      head=L({en:'Loading module',vi:'Module nạp'});
+      lines.push(L({en:`Starter: ${SUBNAME[u.tail]} unit, carbons C${num.get(u.c1)}–C${u.tailTo}${mode==='trans'&&u.tail!=='lac'?' (supplied by a trans-AT)':''}.`,vi:`Starter: đơn vị ${SUBNAME[u.tail]}, carbon C${num.get(u.c1)}–C${u.tailTo}${mode==='trans'&&u.tail!=='lac'?' (do trans-AT cung cấp)':''}.`}));
+    }else if(u.t==='pk'){
+      const e=extSub(u.subs),b=below?below.state:'ketone';
+      const hi=mt.top||u,c1=num.get(hi.c1),ca=num.get(hi.ca);
+      head=L({en:'Extension module',vi:'Module kéo dài'})+(mt.n>1?` ×${mt.n}`:'');
+      lines.push(L({en:`Adds C${mt.n>1?num.get(u.c1)+'…':c1}–C${ca}: ${SUBNAME[e.sub]}${mode==='trans'?' (trans-AT)':''}${e.mt?' + C-MT (gem-substituted α-carbon)':''}.`,vi:`Thêm C${mt.n>1?num.get(u.c1)+'…':c1}–C${ca}: ${SUBNAME[e.sub]}${mode==='trans'?' (trans-AT)':''}${e.mt?' + C-MT (carbon α có hai nhóm thế)':''}.`}));
+      const bc=mt.n>1?'…':num.get((below||{}).c1);
+      const bs={ketone:{en:'β-ketone kept: no KR (or an inactive KR⁰)',vi:'giữ β-keto: không có KR (hoặc KR⁰ không hoạt động)'},oh:{en:'β-hydroxyl: KR',vi:'β-hydroxyl: KR'},ene:{en:'α,β C=C: KR + DH',vi:'C=C α,β: KR + DH'},ch2:{en:'fully reduced CH₂: KR + DH + ER',vi:'khử hoàn toàn thành CH₂: KR + DH + ER'}}[b];
+      lines.push(L({en:`β-carbon C${bc}: ${bs.en}.`,vi:`Carbon β C${bc}: ${bs.vi}.`}));
+    }else{
+      head=L({en:'NRPS module',vi:'Module NRPS'});
+      lines.push(L({en:`Adds ${u.aa} (C${num.get(u.c1)}–C${num.get(u.ca)} and its N)${mi>0?(u.cy?'; Cy closes the '+(u.aa==='Cys'?'thiazoline':'oxazoline')+' ring':'; C joins it to the chain'):''}.`,vi:`Thêm ${u.aa} (C${num.get(u.c1)}–C${num.get(u.ca)} và N)${mi>0?(u.cy?'; Cy đóng vòng '+(u.aa==='Cys'?'thiazoline':'oxazoline'):'; C nối vào chuỗi'):''}.`}));
+    }
+    if(mi===meta.length-1){
+      const top=alt.units[0];
+      if(rel.kind==='acid')lines.push(L({en:'Release: TE hydrolysis gives the free acid.',vi:'Giải phóng: TE thủy phân cho acid tự do.'}));
+      else if(rel.kind==='lactone'){const x=[0,num.get(chainList(alt.units)[rel.idx])];lines.push(L({en:`Release: TE macrolactonisation. The hydroxyl on C${x[1]||'?'} attacks C1, giving a ${rel.idx+2}-membered lactone.`,vi:`Giải phóng: TE đóng vòng macrolactone. Hydroxyl ở C${x[1]||'?'} tấn công C1, tạo lactone ${rel.idx+2} cạnh.`}))}
+      else lines.push(L({en:`Release: TE cyclisation through the N-terminal amine (${rel.idx+1}-membered macrolactam).`,vi:`Giải phóng: TE đóng vòng qua amine đầu N (macrolactam ${rel.idx+1} cạnh).`}));
+    }
+    out.push({head,lines});
+  });
+  return out;
+}
+
+/* ---------- main entry ---------- */
+function analyze(g0,mode,opt){
+  const R={ok:false,level:'none',msg:null,notes:[],extras:[],S:null,SIMr:null,smiles:'',formulaIn:'',formulaOut:'',mods:[]};
+  let g;try{g=prep(g0)}catch(e){R.msg={en:'Could not read the structure: '+e.message,vi:'Không đọc được cấu trúc: '+e.message};return R}
+  R.formulaIn=graphFormula(g);
+  if(g.a.length<2){R.msg={en:'The structure is too small.',vi:'Cấu trúc quá nhỏ.'};return R}
+  if(g.a.length>120){R.msg={en:'The structure is too large for this tool (more than 120 heavy atoms).',vi:'Cấu trúc quá lớn cho công cụ này (hơn 120 nguyên tử nặng).'};return R}
+  const rt=retro(g);
+  if(!rt.alts.length){
+    const f=rt.fails.slice().sort((a,b)=>b.d-a.d)[0];
+    R.msg=f?{en:'No assembly line explains this structure. '+f.en,vi:'Không có dây chuyền nào giải thích cấu trúc này. '+f.vi}:
+      {en:'No carboxyl-type carbon (acid, lactone or lactam C=O) was found. An assembly line releases its product at such a carbon.',vi:'Không tìm thấy carbon kiểu carboxyl (C=O của acid, lactone hoặc lactam). Dây chuyền giải phóng sản phẩm tại carbon như vậy.'};
+    return R;
+  }
+  // rank, verify
+  const cands=[];
+  rt.alts.forEach(alt=>{
+    const rel=relOf(alt);if(!rel)return;
+    const cov=new Set(alt.cov),unc=[];for(let i=0;i<g.a.length;i++)if(!cov.has(i))unc.push(i);
+    cands.push({alt,rel,unc,cost:unc.length*100+alt.pen*10+alt.units.length+(opt&&opt.merge?0:0)});
+  });
+  cands.sort((x,y)=>x.cost-y.cost);
+  let tried=0,bestFail=null;
+  for(const c of cands){
+    if(tried++>60)break;
+    // pruned input
+    const unc=new Set(c.unc),keep=[],map={};g.a.forEach((a,i)=>{if(!unc.has(i)){map[i]=keep.length;keep.push({...a})}});
+    g.b.forEach(([x,y,o])=>{const kx=!unc.has(x),ky=!unc.has(y);if(kx&&!ky)keep[map[x]].h+=o;else if(!kx&&ky)keep[map[y]].h+=o});
+    const pr={a:keep,b:g.b.filter(([x,y])=>!unc.has(x)&&!unc.has(y)).map(([x,y,o])=>[map[x],map[y],o])};
+    const want=graphKey(pr);
+    let built,sim,pg;
+    try{built=buildLine(c.alt,c.rel,mode,opt);sim=simulate(built.S);if(!sim.final||sim.broken)throw new Error('sim');pg=snapToGraph(sim.final)}catch(e){continue}
+    const got=graphKey(pg);
+    const fit={c,built,sim,pg,got,want,pr};
+    if(got===want){
+      const core=g.a.length-c.unc.length;
+      if(c.unc.length&&(core<6||core<0.35*g.a.length)){
+        R.level='none';R.S=null;R.SIMr=null;
+        R.msg={en:`Only a small piece (${core} of ${g.a.length} heavy atoms) fits a polyketide or peptide backbone. The rest of the molecule (rings, hetero-aromatics or other groups) is not made by a modular PKS/NRPS line.`,vi:`Chỉ một phần nhỏ (${core}/${g.a.length} nguyên tử nặng) khớp khung polyketide hoặc peptide. Phần còn lại (vòng, dị vòng thơm hoặc nhóm khác) không do dây chuyền PKS/NRPS dạng module tạo ra.`};
+        return R;
+      }
+      R.ok=true;R.level=c.unc.length?'partial':'full';R.S=built.S;R.SIMr=sim;R.smiles=snapToSMILES(sim.final);R.formulaOut=graphFormula(pg);
+      R.mods=explain(c.alt,c.rel,sim,mode,built.meta);
+      // extras description
+      if(c.unc.length){
+        const adj=rt.adj,seen=new Set(),numMap=carbonNumbers(c.alt.units);
+        c.unc.forEach(a=>{if(seen.has(a))return;const comp=[],q=[a];seen.add(a);while(q.length){const u=q.pop();comp.push(u);adj[u].forEach(e=>{if(unc.has(e.j)&&!seen.has(e.j)){seen.add(e.j);q.push(e.j)}})}
+          const host=[...new Set(comp.flatMap(u=>adj[u].filter(e=>!unc.has(e.j)).map(e=>e.j)))];
+          const f={};comp.forEach(u=>f[g.a[u].el]=(f[g.a[u].el]||0)+1);
+          const nbond=g.b.filter(([x,y])=>(comp.includes(x)&&!unc.has(y))||(comp.includes(y)&&!unc.has(x))).length;
+          R.extras.push({atoms:comp,formula:Object.keys(f).sort().map(k=>k+(f[k]>1?f[k]:'')).join(''),host,nbond,at:host.map(h=>numMap.get(h)).filter(Boolean)})});
+      }
+      const xl=R.extras.find(x=>x.nbond>=2&&x.atoms.length>=3);
+      if(xl){R.ok=false;R.level='none';R.S=null;R.SIMr=null;R.mods=[];R.extras=[];R.notes=[];R.smiles='';
+        R.msg={en:'A group of the molecule is bonded to the backbone at two or more points (an extra ring or cross-link). Such rings are made by tailoring enzymes (cyclases, Diels-Alderases, oxidases), which this tool does not model. Try the open-chain or ring-free precursor.',vi:'Một nhóm của phân tử nối với khung chính tại hai điểm trở lên (vòng phụ hoặc liên kết chéo). Những vòng này do enzyme biến đổi tạo ra (cyclase, Diels-Alderase, oxidase) mà công cụ này không mô hình hóa. Hãy thử tiền chất mạch hở hoặc không có vòng đó.'};
+        return R}
+      const hasMe=c.alt.units.some(u=>u.t==='pk'&&u.subs.includes('Me'));
+      if(hasMe)R.notes.push({en:'α-Methyl branches are shown as methylmalonyl extenders. A malonyl module with a C-MT domain gives the same structure.',vi:'Nhánh α-methyl được thể hiện bằng đơn vị methylmalonyl. Module malonyl có thêm domain C-MT cho cùng cấu trúc.'});
+      if(c.alt.units.some((u,i,arr)=>u.t==='pk'&&arr[i+1]&&arr[i+1].state==='ketone'))R.notes.push({en:'A β-ketone can come from a module with no KR or from one with an inactive KR⁰.',vi:'β-keto có thể đến từ module không có KR hoặc có KR⁰ không hoạt động.'});
+      R.notes.push({en:'Stereochemistry is ignored. KR, ER and AT stereo-types cannot be read from this analysis.',vi:'Bỏ qua lập thể. Không thể suy ra kiểu lập thể của KR, ER và AT từ phân tích này.'});
+      R.notes.push({en:'Whether the AT is in cis or in trans cannot be told from the product. Use the switch and run it again.',vi:'Không thể biết AT là cis hay trans từ sản phẩm. Dùng nút chuyển rồi chạy lại.'});
+      return R;
+    }
+    if(!bestFail)bestFail=fit;
+  }
+  if(bestFail){
+    R.level='mismatch';R.S=bestFail.built.S;R.SIMr=bestFail.sim;R.smiles=snapToSMILES(bestFail.sim.final);R.formulaOut=graphFormula(bestFail.pg);
+    R.mods=explain(bestFail.c.alt,bestFail.c.rel,bestFail.sim,mode,bestFail.built.meta);
+    R.msg={en:'The closest line does not reproduce the structure exactly. Some feature is outside this tool (for example a different starter, an α-hydroxyl, a cross-link, a ring not made by the TE, or a stereo-defined feature).',vi:'Dây chuyền gần nhất không tái tạo đúng cấu trúc. Có đặc điểm nằm ngoài khả năng của công cụ (ví dụ starter khác, hydroxyl ở α, liên kết chéo, vòng không do TE tạo, hoặc đặc điểm lập thể).'};
+    return R;
+  }
+  const f=rt.fails.slice().sort((a,b)=>b.d-a.d)[0];
+  R.msg=f?{en:'No assembly line explains this structure. '+f.en,vi:'Không có dây chuyền nào giải thích cấu trúc này. '+f.vi}:{en:'No assembly line in this tool can build the structure.',vi:'Không dây chuyền nào trong công cụ này tạo được cấu trúc.'};
+  return R;
+}
+
+/* ====================================================================
+   panel: paste / draw a structure -> predicted assembly line
+   ==================================================================== */
+Object.assign(UI.en,{predict:'Structure → line'});
+Object.assign(UI.vi,{predict:'Cấu trúc → dây chuyền'});
+const PD={tab:'paste',text:'',mode:'cis',merge:false,out:null,err:null,exCache:{}};
+const PE={g:{a:[],b:[]},tool:'draw',el:'N',drag:null,hover:null};
+const BL=38;
+
+/* ---------- drawing ---------- */
+const ELCOL={O:'#c0392b',N:'#2b5fc0',S:'#a07800',P:'#c06a00',C:'#1c2430'};
+function hLabel(g,i,deg_){const a=g.a[i];const h=a.h||0;return a.el+(h>0?'H'+(h>1?'₂₃₄'[h-2]||h:''):'')}
+function edSVG(g,o){
+  o=o||{};fixH(g);
+  const n=g.a.length,adj=adjOf(g);let vb;
+  if(o.fit&&n){let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;g.a.forEach(a=>{x0=Math.min(x0,a.x);x1=Math.max(x1,a.x);y0=Math.min(y0,a.y);y1=Math.max(y1,a.y)});
+    const m=26;vb=[x0-m,y0-m,x1-x0+2*m,y1-y0+2*m]}
+  else vb=[0,0,640,330];
+  const lab=i=>g.a[i].el!=='C';
+  let s='';
+  g.b.forEach(([x,y,t],bi)=>{
+    const p=g.a[x],q=g.a[y];let dx=q.x-p.x,dy=q.y-p.y;const L_=Math.hypot(dx,dy)||1;dx/=L_;dy/=L_;
+    const sh=(i)=>lab(i)?9:0;
+    const x1=p.x+dx*sh(x),y1=p.y+dy*sh(x),x2=q.x-dx*sh(y),y2=q.y-dy*sh(y);
+    const nx=-dy,ny=dx,ln=(ox,oy,extra='')=>`<line x1="${(x1+nx*ox).toFixed(1)}" y1="${(y1+ny*ox).toFixed(1)}" x2="${(x2+nx*ox).toFixed(1)}" y2="${(y2+ny*ox).toFixed(1)}" stroke="#1c2430" stroke-width="2" stroke-linecap="round" ${extra}/>`;
+    if(t===2)s+=ln(-2.6)+ln(2.6);else if(t===3)s+=ln(0)+ln(-4)+ln(4);else if(t===1.5)s+=ln(0)+ln(4.5,'stroke-dasharray="4 3"');else s+=ln(0);
+    if(o.edit)s+=`<line class="bhit" data-b="${bi}" x1="${p.x}" y1="${p.y}" x2="${q.x}" y2="${q.y}" stroke="transparent" stroke-width="12"/>`;
+  });
+  g.a.forEach((a,i)=>{
+    if(lab(i))s+=`<text x="${a.x}" y="${a.y}" text-anchor="middle" dominant-baseline="central" font-size="15" font-weight="700" fill="${ELCOL[a.el]||'#444'}" stroke="#fff" stroke-width="4" paint-order="stroke" font-family="IBM Plex Sans,system-ui,sans-serif">${hLabel(g,i)}</text>`;
+    else if(o.edit&&!adj[i].length)s+=`<text x="${a.x}" y="${a.y}" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#8a94a3" font-family="IBM Plex Sans,system-ui,sans-serif">CH₄</text>`;
+    if(o.edit)s+=`<circle class="ahit${PE.hover===i?' on':''}" data-a="${i}" cx="${a.x}" cy="${a.y}" r="11" />`;
+  });
+  if(o.edit&&PE.drag&&PE.drag.moved){const a=g.a[PE.drag.a];s+=`<line x1="${a.x}" y1="${a.y}" x2="${PE.drag.x}" y2="${PE.drag.y}" stroke="#2f8f5f" stroke-width="2" stroke-dasharray="5 4"/>`}
+  return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}" ${o.edit?'id="edsvg" style="width:100%;touch-action:none"':'style="width:100%;max-width:'+Math.round(vb[2]*1.3)+'px;height:auto"'} role="img" aria-label="Structure">${s}</svg>`;
+}
+function edCleanCopy(){return{a:PE.g.a.map(a=>({el:a.el,h:0,imp:true,chg:0,x:a.x,y:a.y})),b:PE.g.b.map(b=>b.slice())}}
+function edRedraw(){
+  const box=$('#edbox');if(!box)return;
+  box.innerHTML=edSVG(PE.g,{edit:true});
+  const smi=$('#edsmi');if(smi){try{smi.textContent=PE.g.a.length?writeSMILES(PE.g):'—'}catch(e){smi.textContent='—'}}
+  const fm=$('#edform');if(fm){fm.textContent=PE.g.a.length?graphFormula(PE.g):''}
+}
+function edPoint(e){const svg=$('#edsvg'),pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const m=svg.getScreenCTM();return m?pt.matrixTransform(m.inverse()):{x:0,y:0}}
+function edAddAtom(el_,x,y){PE.g.a.push({el:el_,h:0,imp:true,chg:0,x:Math.round(x),y:Math.round(y)});return PE.g.a.length-1}
+function edBond(a,b){if(a===b)return;const e=PE.g.b.find(([x,y])=>(x===a&&y===b)||(x===b&&y===a));
+  if(e)e[2]=e[2]>=3?1:e[2]+1;else PE.g.b.push([a,b,1])}
+function edNear(x,y,ex){return PE.g.a.findIndex((a,i)=>i!==ex&&Math.hypot(a.x-x,a.y-y)<14)}
+function edAngles(i){const a=PE.g.a[i];return adjOf(PE.g)[i].map(e=>Math.atan2(PE.g.a[e.j].y-a.y,PE.g.a[e.j].x-a.x))}
+function edFreeDir(i){
+  const a=PE.g.a[i],nb=edAngles(i),dist=(t)=>Math.min(...PE.g.a.map((q,k)=>k===i?1e9:Math.hypot(q.x-(a.x+BL*Math.cos(t)),q.y-(a.y+BL*Math.sin(t)))),1e9);
+  if(!nb.length)return-Math.PI/6;
+  if(nb.length===1){const c=nb[0]+Math.PI,c1=c+Math.PI/3,c2=c-Math.PI/3;
+    const adj=adjOf(PE.g),j=adj[i][0].j,ks=adj[j].filter(e=>e.j!==i).map(e=>PE.g.a[e.j]);
+    const far=t=>ks.length?Math.min(...ks.map(k=>Math.hypot(k.x-(a.x+BL*Math.cos(t)),k.y-(a.y+BL*Math.sin(t))))):dist(t);
+    return far(c1)>=far(c2)?c1:c2}
+  let best=0,bs=-1;for(let k=0;k<12;k++){const t=k*Math.PI/6;const sc=Math.min(...nb.map(b=>{let d=Math.abs(((t-b+Math.PI*3)%(Math.PI*2))-Math.PI);return Math.PI-d}))+dist(t)*1e-4;if(sc>bs){bs=sc;best=t}}
+  return best;
+}
+function edNewFrom(i,t,el_){const a=PE.g.a[i];const x=a.x+BL*Math.cos(t),y=a.y+BL*Math.sin(t);
+  if(x<8||y<8||x>632||y>322)return;
+  const nx=edNear(x,y,i);if(nx>=0)edBond(i,nx);else{const k=edAddAtom(el_,x,y);edBond(i,k)}}
+function edRing(x,y){const ids=[];for(let k=0;k<6;k++){const t=Math.PI/6+k*Math.PI/3;ids.push(edAddAtom('C',x+BL*Math.cos(t),y+BL*Math.sin(t)))}
+  ids.forEach((v,k)=>PE.g.b.push([v,ids[(k+1)%6],k%2?2:1]))}
+function edRemoveAtom(i){PE.g.a.splice(i,1);PE.g.b=PE.g.b.filter(([x,y])=>x!==i&&y!==i).map(([x,y,o])=>[x>i?x-1:x,y>i?y-1:y,o])}
+function edBind(){
+  const svg=$('#edbox');if(!svg)return;
+  const newEl=()=>PE.tool==='el'?PE.el:'C';
+  svg.addEventListener('pointerdown',e=>{
+    e.preventDefault();const p=edPoint(e),t=e.target;
+    const ai=t.dataset&&t.dataset.a!=null?+t.dataset.a:-1,bi=t.dataset&&t.dataset.b!=null?+t.dataset.b:-1;
+    if(PE.tool==='erase'){if(ai>=0)edRemoveAtom(ai);else if(bi>=0)PE.g.b.splice(bi,1);edRedraw();return}
+    if(PE.tool==='ring'){if(ai<0&&bi<0)edRing(Math.max(40,Math.min(600,p.x)),Math.max(40,Math.min(290,p.y)));edRedraw();return}
+    if(ai>=0){PE.drag={a:ai,x:p.x,y:p.y,moved:false,sx:p.x,sy:p.y};try{svg.setPointerCapture(e.pointerId)}catch(_){}return}
+    if(bi>=0){const b=PE.g.b[bi];b[2]=b[2]>=3?1:b[2]+1;edRedraw();return}
+    edAddAtom(newEl(),p.x,p.y);edRedraw();
+  });
+  svg.addEventListener('pointermove',e=>{
+    const p=edPoint(e);
+    if(PE.drag){PE.drag.x=p.x;PE.drag.y=p.y;if(Math.hypot(p.x-PE.drag.sx,p.y-PE.drag.sy)>9)PE.drag.moved=true;if(PE.drag.moved)edRedraw();return}
+  });
+  const end=e=>{
+    if(!PE.drag)return;const d=PE.drag;PE.drag=null;const p=edPoint(e);
+    const A=PE.g.a[d.a];
+    if(!d.moved){
+      if(PE.tool==='el'){A.el=PE.el}
+      else edNewFrom(d.a,edFreeDir(d.a),'C');
+    }else{
+      const hit=edNear(p.x,p.y,d.a);
+      if(hit>=0)edBond(d.a,hit);
+      else{const t=Math.round(Math.atan2(p.y-A.y,p.x-A.x)/(Math.PI/6))*(Math.PI/6);edNewFrom(d.a,t,newEl())}
+    }
+    edRedraw();
+  };
+  svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',()=>{PE.drag=null;edRedraw()});
+}
+function edExample(){
+  const P=[[100,200,'C'],[133,181,'C'],[166,200,'C'],[199,181,'C'],[232,200,'C'],[265,181,'C'],[265,143,'O'],[298,200,'O'],[133,143,'O'],[232,238,'C']];
+  PE.g={a:P.map(([x,y,e])=>({el:e,h:0,imp:true,chg:0,x,y})),b:[[0,1,1],[1,2,1],[2,3,1],[3,4,1],[4,5,1],[5,6,2],[5,7,1],[1,8,1],[4,9,1]]};
+}
+function molToEditor(g){ // scale a molfile layout into the editor
+  const xs=g.a.map(a=>a.x),ys=g.a.map(a=>a.y);
+  let bl=0;g.b.forEach(([x,y])=>bl+=Math.hypot(g.a[x].x-g.a[y].x,g.a[x].y-g.a[y].y));bl=g.b.length?bl/g.b.length:1;
+  const k=(bl>0?BL/bl:1),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  const w=(x1-x0)*k,h=(y1-y0)*k,sc=Math.min(1,600/Math.max(w,1),290/Math.max(h,1))*k;
+  const ox=(640-(x1-x0)*sc)/2,oy=(330-(y1-y0)*sc)/2;
+  return{a:g.a.map(a=>({el:a.el,h:0,imp:true,chg:0,x:Math.round(ox+(a.x-x0)*sc),y:Math.round(oy+(a.y-y0)*sc)})),b:g.b.map(b=>b.slice())};
+}
+
+/* ---------- panel ---------- */
+function exSmiles(id){
+  if(PD.exCache[id])return PD.exCache[id];
+  const sim=simulate(PRESETS[id]());return PD.exCache[id]=snapToSMILES(sim.final);
+}
+function isMolfile(t){return /V2000|M\s+END/.test(t)||(t.split('\n').length>=5&&/^\s*\d+\s+\d+/.test(t.split('\n')[3]||'')&&!/[A-Za-z]{3,}/.test((t.split('\n')[3]||'')))}
+function pdBuild(){
+  const d=$('#pdrawer');d.replaceChildren();
+  const T=o=>L(o);
+  d.append(el('div',{style:'display:flex;align-items:center;gap:8px'},el('h2',{style:'margin-right:auto'},T({en:'Structure → assembly line',vi:'Cấu trúc → dây chuyền'})),el('div',{class:'seg langseg',role:'group','aria-label':'Language'},el('button',{'aria-pressed':String(lang==='en'),onclick:()=>{lang='en';applyLang()}},'EN'),el('button',{'aria-pressed':String(lang==='vi'),onclick:()=>{lang='vi';applyLang()}},'VI')),el('button',{class:'btn',onclick:pdClose},tr('close'))));
+  d.append(el('p',{class:'pdhint'},T({en:'Paste a SMILES string or a molfile, or draw a structure. The tool reads the backbone as a chain of polyketide and amino acid building blocks and proposes the modules and domains that would make it. It checks the answer by running its own simulator and comparing the result with your structure.',
+    vi:'Dán chuỗi SMILES hoặc molfile, hoặc tự vẽ cấu trúc. Công cụ đọc khung carbon như chuỗi các đơn vị polyketide và amino acid rồi đề xuất các module và domain tạo ra nó. Kết quả được kiểm tra bằng chính bộ mô phỏng và so sánh với cấu trúc của bạn.'})));
+  const tabs=el('div',{class:'seg',role:'tablist'},
+    el('button',{role:'tab','aria-pressed':String(PD.tab==='paste'),onclick:()=>{PD.tab='paste';pdBuild()}},T({en:'Paste',vi:'Dán'})),
+    el('button',{role:'tab','aria-pressed':String(PD.tab==='draw'),onclick:()=>{PD.tab='draw';pdBuild()}},T({en:'Draw',vi:'Vẽ'})));
+  d.append(tabs);
+  if(PD.tab==='paste'){
+    const ta=el('textarea',{id:'pdta',rows:5,spellcheck:'false',placeholder:T({en:'SMILES, for example CC(O)CCC(C)C(=O)O   (or paste a molfile)',vi:'SMILES, ví dụ CC(O)CCC(C)C(=O)O   (hoặc dán molfile)'}),'aria-label':'SMILES'});
+    ta.value=PD.text;ta.addEventListener('input',()=>PD.text=ta.value);
+    d.append(ta);
+    const ex=el('div',{class:'pdex'},el('span',{},T({en:'Try:',vi:'Thử:'})));
+    [['hexa','5-OH-2-Me-hexanoic acid'],['debs','6-dEB'],['pik','narbonolide'],['nrps','Ile-Ala-Cys thiazoline'],['fr9','fr9-like hybrid']].forEach(([id,nm])=>
+      ex.append(el('button',{class:'btn sm',onclick:()=>{PD.text=exSmiles(id);ta.value=PD.text}},nm)));
+    d.append(ex);
+  }else{
+    const tl=el('div',{class:'edtools'});
+    const tb=(id,txt,tip,fn)=>el('button',{class:'btn sm','aria-pressed':String(fn?false:PE.tool===id&&(id!=='el')),title:tip,onclick:()=>{PE.tool=id;pdBuild()}},txt);
+    tl.append(tb('draw','C '+T({en:'Draw',vi:'Vẽ'}),T({en:'Click an atom to extend the chain; click empty space to start; drag to place a bond; click a bond to change its order.',vi:'Bấm vào nguyên tử để nối thêm; bấm chỗ trống để bắt đầu; kéo để tạo liên kết; bấm vào liên kết để đổi bậc.'})));
+    ['N','O','S'].forEach(x=>tl.append(el('button',{class:'btn sm','aria-pressed':String(PE.tool==='el'&&PE.el===x),title:T({en:'Click an atom to turn it into '+x+'; click empty space or drag to add '+x,vi:'Bấm vào nguyên tử để đổi thành '+x+'; bấm chỗ trống hoặc kéo để thêm '+x}),onclick:()=>{PE.tool='el';PE.el=x;pdBuild()}},x)));
+    tl.append(tb('ring','⌬ '+T({en:'Benzene',vi:'Benzene'}),T({en:'Click empty space to place a benzene ring',vi:'Bấm chỗ trống để đặt vòng benzene'})));
+    tl.append(tb('erase','⌫ '+T({en:'Erase',vi:'Xóa'}),T({en:'Click an atom or bond to delete it',vi:'Bấm vào nguyên tử hoặc liên kết để xóa'})));
+    tl.append(el('button',{class:'btn sm',onclick:()=>{PE.g={a:[],b:[]};edRedraw()}},T({en:'Clear',vi:'Xóa hết'})));
+    tl.append(el('button',{class:'btn sm',onclick:()=>{edExample();edRedraw()}},T({en:'Example',vi:'Ví dụ'})));
+    d.append(tl,el('div',{id:'edbox',class:'edbox'}),el('div',{class:'edinfo'},el('code',{id:'edsmi'}),el('span',{id:'edform'}),
+      el('button',{class:'btn sm',onclick:async()=>{try{await navigator.clipboard.writeText(writeSMILES(PE.g));toast(L({en:'SMILES copied',vi:'Đã chép SMILES'}))}catch(e){}}},T({en:'Copy SMILES',vi:'Chép SMILES'}))));
+    edRedraw();edBind();
+  }
+  // options
+  const opts=el('div',{class:'pdopts'},
+    el('span',{class:'lbl'},T({en:'Acyltransferase',vi:'Acyltransferase'})),
+    el('div',{class:'seg'},
+      el('button',{'aria-pressed':String(PD.mode==='cis'),onclick:()=>{PD.mode='cis';pdBuild();if(PD.out)pdRun()}},'cis-AT'),
+      el('button',{'aria-pressed':String(PD.mode==='trans'),onclick:()=>{PD.mode='trans';pdBuild();if(PD.out)pdRun()}},'trans-AT')),
+    el('label',{class:'chk'},el('input',{type:'checkbox',checked:PD.merge,onchange:e=>{PD.merge=e.target.checked;if(PD.out)pdRun()}}),el('span',{},T({en:'Merge identical modules into one repeated module (↻)',vi:'Gộp các module giống nhau thành một module lặp (↻)'}))),
+    el('button',{class:'btn pri',style:'margin-left:auto',onclick:pdRun},T({en:'Predict assembly line',vi:'Dự đoán dây chuyền'})));
+  d.append(opts,el('div',{id:'pdres'}));
+  if(PD.out||PD.err)pdShow();
+}
+function pdClose(){$('#pdrawer').classList.remove('on')}
+function pdRun(){
+  PD.out=null;PD.err=null;let g=null,pre=null;
+  try{
+    if(PD.tab==='draw'){
+      if(PE.g.a.length<2)throw new Error(L({en:'Draw at least two atoms first.',vi:'Hãy vẽ ít nhất hai nguyên tử.'}));
+      g=edCleanCopy();
+    }else{
+      const t=PD.text.trim();if(!t)throw new Error(L({en:'Paste a SMILES string or a molfile first.',vi:'Hãy dán chuỗi SMILES hoặc molfile trước.'}));
+      if(isMolfile(PD.text)){const m=parseMol(PD.text);g=m;const ed=molToEditor(m);pre=ed;PE.g=ed}
+      else g=parseSMILES(t);
+    }
+  }catch(e){PD.err=e.message;pdShow();return}
+  const R=analyze(g,PD.mode,{merge:PD.merge});
+  PD.out={R,pre};pdShow();
+}
+function chipRow(m,R){
+  const row=el('div',{class:'pdchips'});
+  m.domains.forEach(p=>{
+    const c=el('div',{class:'pdchip'},domEl(p.type,p.cls));
+    let cap=null;
+    if(p.type==='AT'||p.type==='tAT')cap=SUB[p.opts.sub].n;else if(p.type==='A')cap=p.opts.aa;else if(p.type==='TE')cap=p.opts.mode==='cyc'?tr('cyc'):tr('hydro');
+    if(cap)c.append(el('small',{},cap));row.append(c);
+  });
+  if(m.iter>1)row.append(el('span',{class:'iterb'},'↻×'+m.iter));
+  return row;
+}
+function pdProd(){
+  const box=$('#pdprod');if(!box||!PD.final)return;
+  const keep=PD.focus==null?null:new Set(PD.umap.map((m,u)=>m===PD.focus?u:-1).filter(u=>u>=0));
+  box.innerHTML=structSVG(PD.final,{chg:[],nums:true,umap:PD.umap,keep});
+  $$('.pdmod').forEach((n,i)=>n.classList.toggle('on',PD.focus===i));
+}
+function pdShow(){
+  const box=$('#pdres');if(!box)return;box.replaceChildren();
+  if(PD.err){box.append(el('div',{class:'pdbanner err'},PD.err));return}
+  const {R,pre}=PD.out;
+  const ban=el('div',{class:'pdbanner '+(R.level==='full'?'ok':R.level==='partial'?'warn':'err')});
+  if(R.level==='full')ban.append(el('b',{},'✓ '),L({en:'This line makes exactly your structure (connectivity, ring size and unsaturation).',vi:'Dây chuyền này tạo đúng cấu trúc của bạn (kết nối, kích thước vòng và liên kết đôi).'}));
+  else if(R.level==='partial')ban.append(el('b',{},'◐ '),L({en:`The core is explained. ${R.extras.length} group${R.extras.length>1?'s are':' is'} not made by a PKS or NRPS, which usually means tailoring (hydroxylation, glycosylation, methylation, esterification…). They are left out of the predicted structure.`,
+    vi:`Phần lõi đã được giải thích. ${R.extras.length} nhóm không do PKS hay NRPS tạo ra, thường là biến đổi sau (hydroxyl hóa, glycosyl hóa, methyl hóa, ester hóa…). Các nhóm này không có trong cấu trúc dự đoán.`}));
+  else{ban.append(el('b',{},'✕ '),L(R.msg||{en:'No result.',vi:'Không có kết quả.'}))}
+  box.append(ban);
+  if(!R.S)return;
+  const grid=el('div',{class:'pdgrid'});
+  // left: structure
+  const left=el('div',{class:'pdcol'});
+  left.append(el('h4',{},L({en:'Predicted product',vi:'Sản phẩm dự đoán'})));
+  PD.focus=null;PD.pin=false;PD.umap=[];{let u=0;R.S.modules.forEach((m,i)=>{const n=m.domains.some(d=>d.type==='KS')?(m.iter||1):1;for(let k=0;k<n;k++)PD.umap[u++]=i})}
+  PD.final=R.SIMr.final;
+  left.append(el('div',{id:'pdprod',class:'pdcanvas'}),el('div',{class:'pdnote'},L({en:'Each colour is one module. Hover or click a module on the right to isolate the part of the structure it made.',vi:'Mỗi màu là một module. Rê chuột hoặc bấm vào module bên phải để làm nổi phần cấu trúc do module đó tạo ra.'})));
+  pdProd();
+  left.append(el('div',{class:'pdkv'},el('span',{},L({en:'Formula (input)',vi:'Công thức (đầu vào)'})),el('code',{},R.formulaIn)),
+    el('div',{class:'pdkv'},el('span',{},L({en:'Formula (predicted)',vi:'Công thức (dự đoán)'})),el('code',{},R.formulaOut)),
+    el('div',{class:'pdkv'},el('span',{},'SMILES'),el('code',{class:'smi'},R.smiles)));
+  if(R.extras.length)left.append(el('div',{class:'pdnote'},L({en:'Not explained (tailoring?): ',vi:'Chưa giải thích (biến đổi sau?): '}),R.extras.map(x=>x.formula+(x.at.length?' @C'+x.at.join(',C'):'')).join(' · ')));
+  if(pre)left.append(el('h4',{},L({en:'Your structure',vi:'Cấu trúc của bạn'})),el('div',{class:'pdcanvas',html:edSVG(pre,{fit:true})}));
+  grid.append(left);
+  // right: the line
+  const right=el('div',{class:'pdcol'});
+  right.append(el('h4',{},L({en:'Predicted assembly line',vi:'Dây chuyền dự đoán'})+' · '+(PD.mode==='trans'?'trans-AT':'cis-AT')));
+  if(R.S.trans.length)right.append(el('div',{class:'pdnote'},L({en:'Free-standing trans-AT proteins: ',vi:'Protein trans-AT rời: '})+R.S.trans.map(t=>SUB[t.opts.sub].n).join(', ')));
+  R.S.modules.forEach((m,i)=>{
+    const ex=R.mods[i]||{head:'',lines:[]};
+    right.append(el('div',{class:'pdmod',style:'--mc:'+UCOL[i%UCOL.length],tabindex:0,role:'button',onmouseenter:()=>{if(!PD.pin){PD.focus=i;pdProd()}},onmouseleave:()=>{if(!PD.pin){PD.focus=null;pdProd()}},onclick:()=>{if(PD.pin&&PD.focus===i){PD.pin=false;PD.focus=null}else{PD.pin=true;PD.focus=i}pdProd()},onfocus:()=>{if(!PD.pin){PD.focus=i;pdProd()}},onblur:()=>{if(!PD.pin){PD.focus=null;pdProd()}}},el('div',{class:'pdmh'},el('b',{},tr('module')+' '+(i+1)),el('span',{},ex.head)),chipRow(m,R),el('ul',{},ex.lines.map(t=>el('li',{},t)))));
+  });
+  grid.append(right);box.append(grid);
+  if(R.level!=='mismatch'||true){
+    const nl=el('div',{class:'pdnotes'},el('h4',{},L({en:'Assumptions and limits',vi:'Giả định và giới hạn'})),el('ul',{},R.notes.map(n=>el('li',{},L(n)))));
+    box.append(nl);
+  }
+  box.append(el('div',{class:'pdact'},el('button',{class:'btn pri',onclick:pdLoad},L({en:'Load this line into the sandbox',vi:'Nạp dây chuyền này vào sandbox'}))));
+}
+function pdLoad(){
+  if(!PD.out||!PD.out.R.S)return;
+  S=JSON.parse(JSON.stringify(PD.out.R.S));sel=-1;view='final';commit();pdClose();
+  toast(L({en:'Loaded. Edit the line and watch the structure change.',vi:'Đã nạp. Hãy chỉnh dây chuyền và xem cấu trúc thay đổi.'}));
+}
+$('#bPred').onclick=()=>{const d=$('#pdrawer');if(d.classList.contains('on')){pdClose();return}$('#drawer').classList.remove('on');pdBuild();d.classList.add('on')};
+window.__pred={parseSMILES,parseMol,prep,analyze,snapToSMILES,snapToGraph,graphKey,writeSMILES,graphFormula,retro,PD,PE,pdBuild,pdRun,edExample,get hasPanel(){return true}};
+
+/* ====================================================================
+   practice tab: guided tasks, passcode gate, automatic checks
+   ==================================================================== */
+const PR_HASH={guide:'oxfj2t4kqg',free:'gg5q8sfbt3'};
+const PR={open:false,mode:null,unl:{},done:{},ans:{},msg:{},err:false,openId:null,rev:{}};
+try{PR.unl={guide:sessionStorage.getItem('alsb.pr.u')==='1',free:sessionStorage.getItem('alsb.pr.u2')==='1'};PR.done=JSON.parse(localStorage.getItem('alsb.pr.d')||'{}')||{};PR.ans=JSON.parse(localStorage.getItem('alsb.pr.a')||'{}')||{}}catch(e){}
+
+const prSave=()=>{try{localStorage.setItem('alsb.pr.d',JSON.stringify(PR.done));localStorage.setItem('alsb.pr.a',JSON.stringify(PR.ans))}catch(e){}};
+const fmNow=()=>SIM&&SIM.final?formulaStr(SIM.final.F):'–';
+const anyErr=()=>!!(SIM&&SIM.issues.some(i=>i.lvl==='err'));
+const hasT=(m,t)=>m.domains.some(d=>d.type===t);
+const sol1=()=>({trans:[],modules:[newMod([C_('AT',{sub:'ace'}),C_('ACP')]),newMod([C_('KS'),C_('AT',{sub:'mal'}),C_('ACP'),R_('TE')])]});
+const mystLine=()=>({trans:[],modules:[newMod([C_('AT',{sub:'pro'}),C_('ACP')]),newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mal'}),C_('DH'),C_('KR'),C_('ACP')]),newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('DH'),C_('ER'),C_('KR'),C_('ACP'),R_('TE')])]});
+let mystCache=null;
+const mystSmi=()=>mystCache||(mystCache=snapToSMILES(simulate(mystLine()).final));
+const wrong=(en,vi)=>({ok:false,msg:{en,vi}}),right=(en,vi)=>({ok:true,msg:{en,vi}});
+const cur=()=>({en:'Your product is '+fmNow()+'.',vi:'Sản phẩm của bạn là '+fmNow()+'.'});
+
+const PRTASKS=[
+ {id:'t1',min:3,
+  t:{en:'1 · Your first assembly line',vi:'1 · Dây chuyền đầu tiên'},
+  goal:{en:'Learn to drag domains into modules and what a loading module, an extension module and the TE do.',vi:'Biết kéo thả domain vào module, và vai trò của module nạp, module kéo dài và TE.'},
+  setup:{label:{en:'Start with an empty board',vi:'Bắt đầu với bảng trống'},fn:()=>({trans:[],modules:[]})},
+  steps:[
+   {en:'Press Clear all. From the blue cis-AT area, drag AT onto the dashed “Drop here for a new module” slot, then drag ACP onto the same module. Use the menu on AT to choose Acetyl.',vi:'Bấm Clear all. Từ vùng cis-AT màu xanh, kéo AT vào ô nét đứt “Thả vào đây để tạo module mới”, rồi kéo ACP vào cùng module. Dùng menu trên AT để chọn Acetyl.'},
+   {en:'Make a second module: drag KS to the new-module slot, then add AT (set to Malonyl) and ACP into it.',vi:'Tạo module thứ hai: kéo KS vào ô module mới, rồi thêm AT (chọn Malonyl) và ACP vào đó.'},
+   {en:'Drag TE from the grey Release area into module 2 so the chain is released.',vi:'Kéo TE từ vùng Release màu xám vào module 2 để giải phóng chuỗi.'},
+   {en:'Read the structure and formula. You can also click a domain chip to add it to the selected module, and drag a domain onto the palette to delete it.',vi:'Đọc cấu trúc và công thức. Cũng có thể bấm vào chip domain để thêm vào module đang chọn, và kéo domain thả vào bảng domain để xóa.'}],
+  hint:{en:'Target: acetyl starter + one malonyl extension, no reduction, hydrolysed by TE. Formula C₄H₆O₃.',vi:'Mục tiêu: starter acetyl + một lần kéo dài malonyl, không khử, TE thủy phân. Công thức C₄H₆O₃.'},
+  q:{en:'Why does the product have a ketone on carbon 3?',vi:'Vì sao sản phẩm có nhóm ketone ở carbon 3?'},
+  a:{en:'No KR (or DH/ER) acted on the β-carbon, so the β-ketone made by the KS condensation stays.',vi:'Không có KR (hoặc DH/ER) tác động lên carbon β nên nhóm β-keto tạo ra từ phản ứng ngưng tụ của KS được giữ nguyên.'},
+  check:()=>{if(fmNow()==='C4H6O3'&&SIM.released&&!anyErr())return right('Correct: acetoacetic acid, C₄H₆O₃.','Đúng: acid acetoacetic, C₄H₆O₃.');
+    const c=cur();return wrong(c.en+' Target C₄H₆O₃. Check that module 1 has AT (Acetyl) + ACP, module 2 has KS + AT (Malonyl) + ACP + TE, and nothing else.',c.vi+' Mục tiêu C₄H₆O₃. Kiểm tra module 1 có AT (Acetyl) + ACP, module 2 có KS + AT (Malonyl) + ACP + TE, không thêm gì khác.')}},
+ {id:'t2',min:3,
+  t:{en:'2 · Reduce the β-carbon',vi:'2 · Khử carbon β'},
+  goal:{en:'See how KR, DH and ER act in a fixed order and change one carbon step by step.',vi:'Thấy KR, DH, ER tác động theo thứ tự cố định và biến đổi một carbon từng bước.'},
+  setup:{label:{en:'Load the line from task 1',vi:'Nạp dây chuyền của bài 1'},fn:sol1},
+  steps:[
+   {en:'Tick “Number carbons”. Drag KR into module 2. Open the “After M1” tab (and the final product) and look at carbon 3: ketone became hydroxyl.',vi:'Tick “Number carbons”. Kéo KR vào module 2. Mở tab “After M1” và sản phẩm cuối, nhìn carbon 3: ketone thành hydroxyl.'},
+   {en:'Add DH. Water is lost and a C=C appears. Add ER. The C=C is saturated.',vi:'Thêm DH. Mất nước và xuất hiện liên kết đôi C=C. Thêm ER. Liên kết đôi được khử bão hòa.'},
+   {en:'Now drag DH out onto the palette. Read the Check box: what does the tool say about ER?',vi:'Bây giờ kéo DH ra thả vào bảng domain. Đọc ô Check: công cụ nói gì về ER?'},
+   {en:'Put DH back so that module 2 has KS, AT, KR, DH, ER and ACP, with TE.',vi:'Đặt DH lại để module 2 có KS, AT, KR, DH, ER và ACP, kèm TE.'}],
+  hint:{en:'The order you drag them does not matter. The tool always applies KR, then DH, then ER. Final product: butanoic acid, C₄H₈O₂.',vi:'Thứ tự kéo không quan trọng. Công cụ luôn áp dụng KR, rồi DH, rồi ER. Sản phẩm cuối: acid butanoic, C₄H₈O₂.'},
+  q:{en:'Why does ER do nothing when DH is missing?',vi:'Vì sao ER không làm gì khi thiếu DH?'},
+  a:{en:'ER reduces a C=C, and only DH makes that C=C from the hydroxyl made by KR.',vi:'ER khử liên kết đôi C=C, mà chỉ DH mới tạo C=C đó từ nhóm hydroxyl do KR tạo ra.'},
+  check:()=>{const m=S.modules.find(m=>hasT(m,'KS')&&hasT(m,'KR')&&hasT(m,'DH')&&hasT(m,'ER'));
+    if(m&&fmNow()==='C4H8O2'&&!anyErr())return right('Correct: fully reduced, butanoic acid C₄H₈O₂.','Đúng: khử hoàn toàn, acid butanoic C₄H₈O₂.');
+    const c=cur();return wrong(c.en+' Target C₄H₈O₂, with KR, DH and ER together in the KS module.',c.vi+' Mục tiêu C₄H₈O₂, có KR, DH và ER cùng module với KS.')}},
+ {id:'t3',min:3,
+  t:{en:'3 · Choose the extender, add a module',vi:'3 · Chọn đơn vị kéo dài, thêm module'},
+  goal:{en:'Learn that the AT substrate decides branches, and that each extra module adds two carbons.',vi:'Hiểu rằng cơ chất của AT quyết định nhánh, và mỗi module thêm hai carbon.'},
+  steps:[
+   {en:'Build the two-module line from the lecture: Loading AT (Acetyl) + ACP.',vi:'Xây dây chuyền hai module trong bài giảng: module nạp AT (Acetyl) + ACP.'},
+   {en:'Module 1: KS, AT = Malonyl, KR, ACP.',vi:'Module 1: KS, AT = Malonyl, KR, ACP.'},
+   {en:'Module 2: KS, AT = Methylmalonyl, KR, DH, ER, ACP, then TE.',vi:'Module 2: KS, AT = Methylmalonyl, KR, DH, ER, ACP, rồi TE.'},
+   {en:'The goal is 5-hydroxy-2-methylhexanoic acid, C₇H₁₄O₃. Tip: open Examples & targets to see the target; it turns green when you match it.',vi:'Mục tiêu là acid 5-hydroxy-2-methylhexanoic, C₇H₁₄O₃. Mẹo: mở Examples & targets để xem mục tiêu; mục tiêu sẽ chuyển xanh khi bạn khớp.'}],
+  hint:{en:'Only module 1 has the KR alone; module 2 has the full KR–DH–ER set. If stuck, load the first example from Examples & targets and study it.',vi:'Chỉ module 1 có KR đơn; module 2 có đủ KR–DH–ER. Nếu kẹt, nạp ví dụ đầu tiên trong Examples & targets rồi quan sát.'},
+  q:{en:'Where does the methyl branch on carbon 2 come from?',vi:'Nhánh methyl ở carbon 2 đến từ đâu?'},
+  a:{en:'From the methylmalonyl-CoA chosen by the AT of module 2. A malonyl AT would give no branch.',vi:'Từ methylmalonyl-CoA do AT của module 2 chọn. AT malonyl sẽ không tạo nhánh.'},
+  check:()=>{if(fmNow()==='C7H14O3'&&SIM.released&&!anyErr())return right('Correct: 5-hydroxy-2-methylhexanoic acid, C₇H₁₄O₃.','Đúng: acid 5-hydroxy-2-methylhexanoic, C₇H₁₄O₃.');
+    const c=cur();return wrong(c.en+' Target C₇H₁₄O₃.',c.vi+' Mục tiêu C₇H₁₄O₃.')}},
+ {id:'t4',min:3,
+  t:{en:'4 · Rings and removing a domain',vi:'4 · Vòng và việc bỏ một domain'},
+  goal:{en:'See how a TE makes a macrolactone and why ring size depends on which β-hydroxyls exist.',vi:'Thấy TE tạo macrolactone và kích thước vòng phụ thuộc vào các β-hydroxyl hiện có.'},
+  setup:{label:{en:'Load DEBS (6-dEB)',vi:'Nạp DEBS (6-dEB)'},fn:PRESETS.debs},
+  steps:[
+   {en:'Load DEBS. The product is a 14-membered lactone. Click the TE: it is set to Cyclisation and automatically uses the farthest hydroxyl.',vi:'Nạp DEBS. Sản phẩm là lactone 14 cạnh. Bấm vào TE: đang đặt Cyclisation và tự dùng hydroxyl xa nhất.'},
+   {en:'Drag the KR out of module 1 (the first extension module) and drop it on the palette.',vi:'Kéo KR ra khỏi module 1 (module kéo dài đầu tiên) rồi thả vào bảng domain.'},
+   {en:'Watch the ring: it shrinks. The farthest OH is gone, so the TE closes the ring on the next OH.',vi:'Quan sát vòng: nó nhỏ lại. OH xa nhất đã mất nên TE đóng vòng ở OH kế tiếp.'},
+   {en:'Goal: a 12-membered lactone, C₂₁H₃₆O₆.',vi:'Mục tiêu: lactone 12 cạnh, C₂₁H₃₆O₆.'}],
+  hint:{en:'Only module 1 should lose its KR. Everything else stays as in DEBS.',vi:'Chỉ module 1 mất KR. Mọi thứ khác giữ như DEBS.'},
+  q:{en:'Why did the ring get smaller and not just lose an OH?',vi:'Vì sao vòng nhỏ lại thay vì chỉ mất một OH?'},
+  a:{en:'The TE attacks with the farthest hydroxyl in the chain. Without the first β-OH, the farthest one is nearer to carbon 1, so the ring has fewer atoms.',vi:'TE tấn công bằng hydroxyl xa nhất trong chuỗi. Khi thiếu β-OH đầu tiên, OH xa nhất gần C1 hơn nên vòng có ít nguyên tử hơn.'},
+  check:()=>{const f=SIM&&SIM.final;if(f&&f.rel&&f.rel.kind==='lactone'&&f.rel.size===12&&fmNow()==='C21H36O6')return right('Correct: 12-membered lactone, C₂₁H₃₆O₆.','Đúng: lactone 12 cạnh, C₂₁H₃₆O₆.');
+    const c=cur();return wrong(c.en+' Ring size now: '+((f&&f.rel&&f.rel.size)||'none')+'. Target 12 and C₂₁H₃₆O₆.',c.vi+' Kích thước vòng hiện tại: '+((f&&f.rel&&f.rel.size)||'không có')+'. Mục tiêu 12 và C₂₁H₃₆O₆.')}},
+ {id:'t5',min:3,
+  t:{en:'5 · An NRPS line',vi:'5 · Dây chuyền NRPS'},
+  goal:{en:'Use the orange NRPS area: A picks the amino acid, T carries it, C makes the amide bond, Cy also closes a ring.',vi:'Dùng vùng NRPS màu cam: A chọn amino acid, T mang, C tạo liên kết amide, Cy còn đóng vòng.'},
+  setup:{label:{en:'Start with an empty board',vi:'Bắt đầu với bảng trống'},fn:()=>({trans:[],modules:[]})},
+  steps:[
+   {en:'Module 1: A (choose Ile) + T. The first module needs no C.',vi:'Module 1: A (chọn Ile) + T. Module đầu không cần C.'},
+   {en:'Module 2: C + A (Ala) + T.',vi:'Module 2: C + A (Ala) + T.'},
+   {en:'Module 3: Cy + A (Cys) + T + TE (from the grey area).',vi:'Module 3: Cy + A (Cys) + T + TE (từ vùng xám).'},
+   {en:'Look at the product: a thiazoline ring at the end. Swap Cy for C and compare.',vi:'Nhìn sản phẩm: vòng thiazoline ở cuối. Đổi Cy thành C và so sánh.'}],
+  hint:{en:'Put Cy back in the end. Target Ile–Ala–Cys thiazoline, C₁₂H₂₁N₃O₃S.',vi:'Đặt Cy lại ở cuối. Mục tiêu Ile–Ala–Cys thiazoline, C₁₂H₂₁N₃O₃S.'},
+  q:{en:'What did the Cy domain do that C does not?',vi:'Domain Cy làm được điều gì mà C không làm?'},
+  a:{en:'After forming the amide, Cy lets the Cys side-chain SH attack the carbonyl, losing water and closing the thiazoline ring.',vi:'Sau khi tạo amide, Cy cho nhóm SH của Cys tấn công carbonyl, mất nước và đóng vòng thiazoline.'},
+  check:()=>{if(fmNow()==='C12H21N3O3S'&&S.modules.some(m=>hasT(m,'Cy'))&&!anyErr())return right('Correct: Ile–Ala–Cys thiazoline.','Đúng: Ile–Ala–Cys thiazoline.');
+    const c=cur();return wrong(c.en+' Target C₁₂H₂₁N₃O₃S, with a Cy domain.',c.vi+' Mục tiêu C₁₂H₂₁N₃O₃S, có domain Cy.')}},
+ {id:'t6',min:4,
+  t:{en:'6 · Predict the line from a structure',vi:'6 · Dự đoán dây chuyền từ cấu trúc'},
+  goal:{en:'Work backwards: read a product and recover the starter, extenders and reductive domains.',vi:'Làm ngược: đọc sản phẩm rồi tìm lại starter, đơn vị kéo dài và các domain khử.'},
+  steps:[
+   {en:'Press “Open predictor with the mystery structure” below. It pastes a SMILES for you.',vi:'Bấm “Mở công cụ dự đoán với cấu trúc bí ẩn” bên dưới. Nó dán sẵn SMILES cho bạn.'},
+   {en:'Press Predict assembly line. Hover over each module card: the matching part of the structure lights up.',vi:'Bấm Predict assembly line. Rê chuột lên từng module: phần cấu trúc tương ứng được làm nổi.'},
+   {en:'Answer the three questions below from the prediction.',vi:'Trả lời ba câu hỏi bên dưới dựa trên dự đoán.'}],
+  inputs:[
+   {k:'n',label:{en:'How many extension modules (with KS)?',vi:'Có bao nhiêu module kéo dài (có KS)?'},opts:['2','3','4','5'],ans:'3'},
+   {k:'er',label:{en:'Which extension module has an ER?',vi:'Module kéo dài nào có ER?'},opts:['none','1','2','3'],ans:'3'},
+   {k:'e1',label:{en:'Extender used by extension module 1?',vi:'Đơn vị kéo dài của module kéo dài 1?'},opts:['Malonyl','Methylmalonyl','Ethylmalonyl'],ans:'Methylmalonyl'}],
+  special:'predict',
+  hint:{en:'In the card list, the first card is the loading module; extension modules are the cards that contain KS. The methyl branch at C2 tells you the extender.',vi:'Trong danh sách, thẻ đầu là module nạp; module kéo dài là các thẻ có KS. Nhánh methyl ở C2 cho biết đơn vị kéo dài.'},
+  q:{en:'Why can the tool not tell whether a methyl came from methylmalonyl or from an MT domain?',vi:'Vì sao công cụ không phân biệt được methyl đến từ methylmalonyl hay từ domain MT?'},
+  a:{en:'Both routes give exactly the same molecule. The structure holds no trace of how the methyl got there.',vi:'Cả hai con đường cho cùng một phân tử. Cấu trúc không lưu dấu vết methyl được thêm bằng cách nào.'},
+  check:()=>{const o=PD.out&&PD.out.R;
+    if(!o||!o.ok)return wrong('Run the prediction on the mystery structure first.','Hãy chạy dự đoán cho cấu trúc bí ẩn trước.');
+    if(o.formulaIn!==graphFormula(parseSMILES(mystSmi())))return wrong('The prediction is for a different structure. Use the mystery SMILES.','Dự đoán là của cấu trúc khác. Hãy dùng SMILES bí ẩn.');
+    const A=PRTASKS.find(t=>t.id==='t6').inputs,bad=A.filter(i=>(PR.ans['t6.'+i.k]||'')!==i.ans);
+    if(bad.length)return wrong('Prediction done. Check these answers again: '+bad.map(b=>b.label.en).join('; '),'Đã dự đoán. Kiểm tra lại các câu: '+bad.map(b=>b.label.vi).join('; '));
+    return right('All correct. You read a structure back into modules.','Tất cả đều đúng. Bạn đã đọc ngược cấu trúc thành các module.')}},
+ {id:'t7',bonus:true,min:3,
+  t:{en:'Bonus A · Draw it yourself',vi:'Thưởng A · Tự vẽ cấu trúc'},
+  goal:{en:'Use the drawing editor instead of pasting.',vi:'Dùng trình vẽ thay vì dán.'},
+  steps:[
+   {en:'Open the predictor, go to the Draw tab and press Clear.',vi:'Mở công cụ dự đoán, sang tab Draw và bấm Clear.'},
+   {en:'Draw 3-hydroxybutanoic acid: click to start, click the last atom to extend the chain, use the O tool to add O atoms (drag from a carbon), and click a bond to make it double.',vi:'Vẽ acid 3-hydroxybutanoic: bấm để bắt đầu, bấm vào nguyên tử cuối để nối thêm, dùng công cụ O để thêm O (kéo từ carbon), và bấm vào liên kết để thành liên kết đôi.'},
+   {en:'Press Predict assembly line. Which domain makes the 3-OH?',vi:'Bấm Predict assembly line. Domain nào tạo OH ở vị trí 3?'}],
+  special:'draw',
+  hint:{en:'The formula shown under the editor should read C4H8O3. The Example button gives a longer molecule to edit.',vi:'Công thức dưới trình vẽ phải là C4H8O3. Nút Example cho một phân tử dài hơn để chỉnh sửa.'},
+  q:{en:'Which domain makes the 3-OH?',vi:'Domain nào tạo OH ở vị trí 3?'},a:{en:'KR, which reduces the β-ketone.',vi:'KR, domain khử nhóm β-keto.'},
+  check:()=>{const o=PD.out&&PD.out.R;if(PD.tab==='draw'&&o&&o.ok&&o.formulaIn==='C4H8O3')return right('Correct: your drawing gives a KR-containing line.','Đúng: hình vẽ của bạn cho dây chuyền có KR.');
+    return wrong('Draw 3-hydroxybutanoic acid (C4H8O3) in the Draw tab, then press Predict.','Vẽ acid 3-hydroxybutanoic (C4H8O3) trong tab Draw rồi bấm Predict.')}},
+ {id:'t8',bonus:true,min:3,
+  t:{en:'Bonus B · trans-AT',vi:'Thưởng B · trans-AT'},
+  goal:{en:'See a free-standing AT serve several modules.',vi:'Thấy một AT rời phục vụ nhiều module.'},
+  setup:{label:{en:'Load the trans-AT hybrid',vi:'Nạp chất lai trans-AT'},fn:PRESETS.fr9},
+  steps:[
+   {en:'Load the example. Look at the purple area: the dashed lines show which modules the trans-AT loads.',vi:'Nạp ví dụ. Nhìn vùng tím: các đường nét đứt cho thấy trans-AT nạp cho module nào.'},
+   {en:'Change the trans-AT substrate from Malonyl to Methylmalonyl and watch the structure.',vi:'Đổi cơ chất của trans-AT từ Malonyl sang Methylmalonyl và quan sát cấu trúc.'},
+   {en:'Compare with a cis-AT line: here no module has its own AT.',vi:'So sánh với dây chuyền cis-AT: ở đây không module nào có AT riêng.'}],
+  hint:{en:'Use the drop-down inside the trans-AT chip.',vi:'Dùng menu thả xuống trong chip trans-AT.'},
+  q:{en:'What is the advantage of one AT serving many modules, and what is the risk?',vi:'Một AT phục vụ nhiều module có lợi gì và rủi ro gì?'},
+  a:{en:'One protein is enough for all malonyl units, but it cannot choose different extenders per module unless you add more trans-ATs.',vi:'Một protein đủ cho mọi đơn vị malonyl, nhưng không thể chọn đơn vị khác nhau cho từng module trừ khi thêm trans-AT.'},
+  check:()=>{if(S.trans.length&&S.trans[0].opts.sub==='mmal'&&S.modules.some(m=>hasT(m,'GTP'))&&!anyErr())return right('Correct: every module without an AT now loads methylmalonyl.','Đúng: mọi module không có AT giờ nạp methylmalonyl.');
+    return wrong('Load the trans-AT example and set the trans-AT substrate to Methylmalonyl.','Nạp ví dụ trans-AT và đặt cơ chất của trans-AT là Methylmalonyl.')}}
+];
+
+/* ---------- free practice (no guide) ---------- */
+const myst2Line=()=>({trans:[],modules:[newMod([C_('AT',{sub:'iso'}),C_('ACP')]),newMod([C_('KS'),C_('AT',{sub:'emal'}),C_('KR'),C_('ACP')]),
+  newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('DH'),C_('ER'),C_('KR'),C_('ACP')]),newMod([C_('KS'),C_('AT',{sub:'mal'}),C_('KR'),C_('ACP'),R_('TE')])]});
+let myst2Cache=null;const myst2Smi=()=>myst2Cache||(myst2Cache=snapToSMILES(simulate(myst2Line()).final));
+const ansOK=(id,list)=>list.filter(i=>(PR.ans[id+'.'+i.k]||'')!==i.ans);
+const qFail=(bad)=>wrong('The line works. Check these answers again: '+bad.map(b=>b.label.en).join('; '),'Dây chuyền đúng. Kiểm tra lại các câu: '+bad.map(b=>b.label.vi).join('; '));
+const PRFREE=[
+ {id:'f1',min:3,t:{en:'A · Branched hydroxy acid',vi:'A · Hydroxy acid có nhánh'},
+  goal:{en:'Build a line that makes C₆H₁₂O₃ with a propionyl starter, one extension module and a hydrolysing TE.',vi:'Xây dây chuyền tạo C₆H₁₂O₃ với starter propionyl, một module kéo dài và TE thủy phân.'},
+  task:{en:'The product has a methyl branch next to the acid and a hydroxyl on the β-carbon.',vi:'Sản phẩm có nhánh methyl cạnh nhóm acid và một hydroxyl ở carbon β.'},
+  inputs:[{k:'c',label:{en:'Counting the acid carbon as C1, the OH is on carbon…',vi:'Tính carbon acid là C1, OH nằm ở carbon…'},opts:['2','3','4'],ans:'3'}],
+  sol:()=>({trans:[],modules:[newMod([C_('AT',{sub:'pro'}),C_('ACP')]),newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR'),C_('ACP'),R_('TE')])]}),
+  a:{en:'Propionyl loader, then KS + AT (methylmalonyl) + KR + ACP + TE. The OH sits on C3, the carbon that was the propionyl carbonyl.',vi:'Module nạp propionyl, rồi KS + AT (methylmalonyl) + KR + ACP + TE. OH nằm ở C3, carbon vốn là carbonyl của propionyl.'},
+  check:()=>{if(fmNow()!=='C6H12O3'||!SIM.released||anyErr()||!S.modules.some(m=>hasT(m,'KR'))){const c=cur();return wrong(c.en+' Target C₆H₁₂O₃, released by a TE.',c.vi+' Mục tiêu C₆H₁₂O₃, giải phóng bởi TE.')}
+    const bad=ansOK('f1',PRFREE[0].inputs);return bad.length?qFail(bad):right('Correct.','Đúng.')}},
+ {id:'f2',min:3,t:{en:'B · An α,β-unsaturated acid',vi:'B · Acid không no α,β'},
+  goal:{en:'Make C₅H₈O₂ with an acetyl starter, one extension module with a methylmalonyl extender, and a C=C next to the methyl branch.',vi:'Tạo C₅H₈O₂ với starter acetyl, một module kéo dài dùng methylmalonyl, và liên kết đôi C=C cạnh nhánh methyl.'},
+  inputs:[{k:'mt',label:{en:'Now add an MT to your module. What happens to the DH?',vi:'Thêm MT vào module. DH sẽ thế nào?'},opts:['DH works as before','DH is blocked (no α-hydrogen)','MT is blocked'],ans:'DH is blocked (no α-hydrogen)'}],
+  sol:()=>({trans:[],modules:[newMod([C_('AT',{sub:'ace'}),C_('ACP')]),newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR'),C_('DH'),C_('ACP'),R_('TE')])]}),
+  a:{en:'KR then DH on a methylmalonyl module gives 2-methylbut-2-enoic acid. With MT the α-carbon holds two groups and has no hydrogen, so DH cannot make the C=C.',vi:'KR rồi DH trên module methylmalonyl cho acid 2-methylbut-2-enoic. Khi có MT, carbon α mang hai nhóm thế và không còn H nên DH không tạo được C=C.'},
+  check:()=>{if(fmNow()!=='C5H8O2'||!SIM.released||anyErr()||!S.modules.some(m=>hasT(m,'DH'))){const c=cur();return wrong(c.en+' Target C₅H₈O₂ with no errors.',c.vi+' Mục tiêu C₅H₈O₂, không lỗi.')}
+    const bad=ansOK('f2',PRFREE[1].inputs);return bad.length?qFail(bad):right('Correct.','Đúng.')}},
+ {id:'f3',min:3,t:{en:'C · Choose the ring size',vi:'C · Chọn kích thước vòng'},
+  goal:{en:'Make a macrolactone with exactly 10 atoms in the ring. Start from a propionyl loader and use methylmalonyl extenders.',vi:'Tạo macrolactone có đúng 10 nguyên tử trong vòng. Bắt đầu từ module nạp propionyl và dùng đơn vị kéo dài methylmalonyl.'},
+  sol:()=>({trans:[],modules:[newMod([C_('AT',{sub:'pro'}),C_('ACP')]),...[0,1,2,3].map(i=>newMod([C_('KS'),C_('AT',{sub:'mmal'}),C_('KR'),C_('ACP'),...(i===3?[R_('TE',{mode:'cyc'})]:[])]))]}),
+  a:{en:'Four extension modules, each with KR, and a cyclising TE. The farthest OH then sits on carbon 9, giving a 10-membered ring.',vi:'Bốn module kéo dài, mỗi module có KR, và TE đóng vòng. OH xa nhất nằm ở carbon 9 nên vòng có 10 nguyên tử.'},
+  check:()=>{const f=SIM&&SIM.final;if(f&&f.rel&&f.rel.kind==='lactone'&&f.rel.size===10&&!anyErr())return right('Correct: a 10-membered lactone.','Đúng: lactone 10 cạnh.');
+    return wrong('Ring now: '+((f&&f.rel&&f.rel.size)||'none')+'. You need a lactone with 10 atoms.','Vòng hiện tại: '+((f&&f.rel&&f.rel.size)||'không có')+'. Cần lactone 10 nguyên tử.')}},
+ {id:'f4',min:3,t:{en:'D · A peptide with an oxazoline',vi:'D · Peptide có vòng oxazoline'},
+  goal:{en:'Build a Leu–Ser dipeptide on an NRPS line where Ser is closed into a five-membered ring, released as the free acid.',vi:'Xây dipeptide Leu–Ser trên dây chuyền NRPS trong đó Ser đóng thành vòng năm cạnh, giải phóng dưới dạng acid tự do.'},
+  inputs:[{k:'x',label:{en:'Which atom from the side chain closes the ring?',vi:'Nguyên tử nào của chuỗi bên đóng vòng?'},opts:['O','S','N'],ans:'O'}],
+  sol:()=>({trans:[],modules:[newMod([N_('A',{aa:'Leu'}),N_('T')]),newMod([N_('Cy'),N_('A',{aa:'Ser'}),N_('T'),R_('TE')])]}),
+  a:{en:'Module 1: A(Leu) + T. Module 2: Cy + A(Ser) + T + TE. The Ser hydroxyl oxygen closes an oxazoline.',vi:'Module 1: A(Leu) + T. Module 2: Cy + A(Ser) + T + TE. Oxy của hydroxyl Ser đóng vòng oxazoline.'},
+  check:()=>{const ok=S.modules.some(m=>hasT(m,'Cy'))&&S.modules.some(m=>m.domains.some(d=>d.type==='A'&&d.opts.aa==='Ser'))&&S.modules.some(m=>m.domains.some(d=>d.type==='A'&&d.opts.aa==='Leu'))&&SIM.released&&!anyErr();
+    if(!ok||SIM.final.F.S)return wrong('Need Leu then Ser, a Cy domain on the Ser module, and a TE.','Cần Leu rồi Ser, domain Cy ở module Ser, và TE.');
+    const bad=ansOK('f4',PRFREE[3].inputs);return bad.length?qFail(bad):right('Correct: an oxazoline.','Đúng: vòng oxazoline.')}},
+ {id:'f5',min:3,t:{en:'E · A PKS–NRPS hybrid',vi:'E · Chất lai PKS–NRPS'},
+  goal:{en:'Make C₆H₁₁NO₄: an acetyl-primed polyketide unit with a β-hydroxyl, joined by an amide to glycine, released as the acid.',vi:'Tạo C₆H₁₁NO₄: đơn vị polyketide mở đầu bằng acetyl có β-hydroxyl, nối amide với glycine, giải phóng dưới dạng acid.'},
+  inputs:[{k:'d',label:{en:'Which domain makes the amide bond to Gly?',vi:'Domain nào tạo liên kết amide với Gly?'},opts:['KS','AT','C','TE'],ans:'C'}],
+  sol:()=>({trans:[],modules:[newMod([C_('AT',{sub:'ace'}),C_('ACP')]),newMod([C_('KS'),C_('AT',{sub:'mal'}),C_('KR'),C_('ACP')]),newMod([N_('C'),N_('A',{aa:'Gly'}),N_('T'),R_('TE')])]}),
+  a:{en:'Acetyl loader, one malonyl module with KR, then an NRPS module C + A(Gly) + T + TE. The C domain forms the amide.',vi:'Module nạp acetyl, một module malonyl có KR, rồi module NRPS C + A(Gly) + T + TE. Domain C tạo liên kết amide.'},
+  check:()=>{if(fmNow()!=='C6H11NO4'||!SIM.released||anyErr()||!/hyb/.test(SIM.kind)){const c=cur();return wrong(c.en+' Target C₆H₁₁NO₄ from a hybrid line.',c.vi+' Mục tiêu C₆H₁₁NO₄ từ dây chuyền lai.')}
+    const bad=ansOK('f5',PRFREE[4].inputs);return bad.length?qFail(bad):right('Correct.','Đúng.')}},
+ {id:'f6',min:4,t:{en:'F · Read a new structure',vi:'F · Đọc một cấu trúc mới'},
+  goal:{en:'Use the predictor on the structure below and answer from its result.',vi:'Dùng công cụ dự đoán cho cấu trúc dưới đây và trả lời theo kết quả.'},
+  special:'predict2',
+  inputs:[{k:'s',label:{en:'Starter unit',vi:'Đơn vị starter'},opts:['Acetyl','Propionyl','Butyryl','Isobutyryl'],ans:'Isobutyryl'},
+          {k:'e',label:{en:'Extension module that uses ethylmalonyl',vi:'Module kéo dài dùng ethylmalonyl'},opts:['1','2','3'],ans:'1'},
+          {k:'r',label:{en:'Extension module with a full KR–DH–ER set',vi:'Module kéo dài có đủ KR–DH–ER'},opts:['1','2','3'],ans:'2'}],
+  a:{en:'Isobutyryl starter; ethylmalonyl in extension module 1 (KR); module 2 methylmalonyl with KR–DH–ER; module 3 malonyl with KR.',vi:'Starter isobutyryl; ethylmalonyl ở module kéo dài 1 (KR); module 2 methylmalonyl với KR–DH–ER; module 3 malonyl với KR.'},
+  check:()=>{const o=PD.out&&PD.out.R;if(!o||!o.ok)return wrong('Run the prediction on the structure first.','Hãy chạy dự đoán cho cấu trúc trước.');
+    if(o.formulaIn!==graphFormula(parseSMILES(myst2Smi())))return wrong('The prediction is for a different structure.','Dự đoán là của cấu trúc khác.');
+    const bad=ansOK('f6',PRFREE[5].inputs);return bad.length?qFail(bad):right('All correct.','Tất cả đều đúng.')}},
+ {id:'f7',bonus:true,min:5,t:{en:'Bonus · trans-AT only',vi:'Thưởng · chỉ dùng trans-AT'},
+  goal:{en:'Make 5-hydroxy-2-methylhexanoic acid (C₇H₁₄O₃) with no AT inside any module: every unit must come from free-standing trans-AT proteins.',vi:'Tạo acid 5-hydroxy-2-methylhexanoic (C₇H₁₄O₃) mà không module nào chứa AT: mọi đơn vị phải do các protein trans-AT rời cung cấp.'},
+  inputs:[{k:'n',label:{en:'How many trans-AT proteins did you need?',vi:'Bạn cần bao nhiêu protein trans-AT?'},opts:['1','2','3','4'],ans:'3'}],
+  sol:()=>{const t=['ace','mal','mmal'].map(x=>T_('tAT',{sub:x}));const m1=newMod([T_('ACP')]);m1.atSrc=0;const m2=newMod([T_('KS'),T_('KR'),T_('ACP')]);m2.atSrc=1;const m3=newMod([T_('KS'),T_('DH'),T_('ER'),T_('KR'),T_('ACP'),R_('TE')]);m3.atSrc=2;return{trans:t,modules:[m1,m2,m3]}},
+  a:{en:'Three trans-ATs (acetyl for the loader, malonyl, methylmalonyl). Use the menu on each module to choose which one serves it.',vi:'Ba trans-AT (acetyl cho module nạp, malonyl, methylmalonyl). Dùng menu ở mỗi module để chọn protein phục vụ.'},
+  check:()=>{if(fmNow()!=='C7H14O3'||!SIM.released||anyErr()||S.modules.some(m=>hasT(m,'AT'))||!S.trans.length){const c=cur();return wrong(c.en+' Target C₇H₁₄O₃ with no AT inside the modules and at least one trans-AT.',c.vi+' Mục tiêu C₇H₁₄O₃, không có AT trong module và có ít nhất một trans-AT.')}
+    const bad=ansOK('f7',PRFREE[6].inputs);return bad.length?qFail(bad):right('Correct.','Đúng.')}}
+];
+/* ---------- gate + tab ---------- */
+function prLabels(){
+  const t=$('#tabPr'),s=$('#tabSb'),f=$('#tabFr');if(!t)return;
+  s.textContent=L({en:'Sandbox',vi:'Sandbox'});
+  t.textContent=L({en:'Step by step examples',vi:'Ví dụ từng bước'});
+  f.textContent=L({en:'Practice',vi:'Luyện tập'});
+  s.setAttribute('aria-pressed',String(!PR.open));t.setAttribute('aria-pressed',String(PR.mode==='guide'));f.setAttribute('aria-pressed',String(PR.mode==='free'));
+}
+function prSet(mode){
+  PR.mode=mode;PR.open=!!mode;PR.openId=null;PR.err=false;document.body.classList.toggle('prac',PR.open);prLabels();prRender();
+}
+function prUnlock(){
+  const v=($('#prpass')||{}).value||'';
+  if(h53(v.trim().toLowerCase())===PR_HASH[PR.mode]){PR.unl[PR.mode]=true;PR.err=false;try{sessionStorage.setItem(PR.mode==='free'?'alsb.pr.u2':'alsb.pr.u','1')}catch(e){}prLabels();prRender()}
+  else{PR.err=true;prRender();const i=$('#prpass');if(i)i.focus()}
+}
+function prApply(fn){S=fn();sel=-1;view='final';commit();toast(L({en:'Loaded. Now continue with the steps.',vi:'Đã nạp. Hãy tiếp tục các bước.'}))}
+function prOpenPredictor(mode){
+  $('#drawer').classList.remove('on');
+  if(mode==='draw'){PD.tab='draw'}else{PD.tab='paste';PD.text=mode==='paste2'?myst2Smi():mystSmi()}
+  PD.out=null;pdBuild();$('#pdrawer').classList.add('on');
+}
+function prRender(){
+  const d=$('#prac');if(!d)return;d.replaceChildren();if(!PR.open)return;
+  const head=el('div',{class:'prhead'},el('h2',{},PR.mode==='free'?L({en:'Practice',vi:'Luyện tập'}):L({en:'Step by step examples',vi:'Ví dụ từng bước'})),
+    el('button',{class:'btn sm',onclick:()=>prSet(false)},L({en:'Back to sandbox',vi:'Về sandbox'})));
+  d.append(head);
+  d.append(el('div',{class:'lockbar'+(PR.unl[PR.mode]?' open':'')},
+    PR.unl[PR.mode]?[el('span',{},'🔓 '+L({en:'Answers unlocked: use “Show answer” under each task.',vi:'Đã mở đáp án: dùng “Hiện đáp án” dưới mỗi bài.'})),
+      el('button',{class:'btn sm',onclick:()=>{PR.unl[PR.mode]=false;PR.rev={};try{sessionStorage.removeItem(PR.mode==='free'?'alsb.pr.u2':'alsb.pr.u')}catch(e){}prRender()}},L({en:'Lock',vi:'Khóa'}))]
+    :[el('span',{},'🔒 '+L({en:'Answers are locked',vi:'Đáp án đang khóa'})),
+      el('input',{id:'prpass',type:'password',autocomplete:'off','aria-label':'Teacher code',placeholder:L({en:'Teacher code',vi:'Mã giáo viên'}),onkeydown:e=>{if(e.key==='Enter')prUnlock()}}),
+      el('button',{class:'btn pri sm',onclick:prUnlock},L({en:'Unlock',vi:'Mở khóa'})),
+      PR.err?el('span',{class:'prerr'},L({en:'Wrong code',vi:'Sai mã'})):null]));
+  const LIST=PR.mode==='free'?PRFREE:PRTASKS;
+  const core=LIST.filter(t=>!t.bonus),nd=core.filter(t=>PR.done[t.id]).length;
+  d.append(el('p',{class:'prhint'},(PR.mode==='free'?L({en:'No step-by-step guide here. Read each goal, work it out on your own, then press “Check my work”. Answer the short questions where asked.',vi:'Không có hướng dẫn từng bước. Đọc mục tiêu, tự làm, rồi bấm “Kiểm tra bài làm”. Trả lời các câu hỏi ngắn nếu có.'}):L({en:'About 20 minutes. Work through the tasks in order. Press “Check my work” after each: the tool tests your line automatically.',vi:'Khoảng 20 phút. Làm lần lượt các bài. Bấm “Kiểm tra bài làm” sau mỗi bài: công cụ tự kiểm tra dây chuyền của bạn.'}))),
+    el('div',{class:'prbar','aria-label':'progress'},el('i',{style:'width:'+(100*nd/core.length)+'%'})),
+    el('div',{class:'prcount'},nd+' / '+core.length+' '+L({en:'core tasks done',vi:'bài chính đã xong'})));
+  if(PR.openId==null){const f=LIST.find(t=>!PR.done[t.id]);PR.openId=f?f.id:null}
+  LIST.forEach(t=>{
+    const done=!!PR.done[t.id];
+    const card=el('details',{class:'prtask'+(done?' done':''),open:PR.openId===t.id});
+    card.addEventListener('toggle',()=>{if(card.open)PR.openId=t.id});
+    card.append(el('summary',{},el('span',{class:'prmark'},done?'✓':''),el('b',{},L(t.t)),el('span',{class:'prmin'},'~'+t.min+' '+L({en:'min',vi:'phút'}))));
+    const body=el('div',{class:'prbody'});
+    body.append(el('p',{class:'prgoal'},el('b',{},L({en:'Goal: ',vi:'Mục tiêu: '})),L(t.goal)));
+    if(t.setup)body.append(el('button',{class:'btn sm',onclick:()=>prApply(t.setup.fn)},L(t.setup.label)));
+    if(t.special==='predict')body.append(el('button',{class:'btn sm',onclick:()=>prOpenPredictor('paste')},L({en:'Open predictor with the mystery structure',vi:'Mở công cụ dự đoán với cấu trúc bí ẩn'})));
+    if(t.special==='predict2')body.append(el('button',{class:'btn sm',onclick:()=>prOpenPredictor('paste2')},L({en:'Open the predictor with this structure',vi:'Mở công cụ dự đoán với cấu trúc này'})));
+    if(t.special==='draw')body.append(el('button',{class:'btn sm',onclick:()=>prOpenPredictor('draw')},L({en:'Open the drawing tool',vi:'Mở công cụ vẽ'})));
+    if(t.steps&&PR.mode!=='free')body.append(el('ol',{},t.steps.map(s=>el('li',{},L(s)))));
+    if(t.task&&PR.mode==='free')body.append(el('p',{class:'prtaskp'},L(t.task)));
+    if(t.inputs)t.inputs.forEach(i=>{
+      const sel_=el('select',{class:'opt',onchange:e=>{PR.ans[t.id+'.'+i.k]=e.target.value;prSave()}},el('option',{value:''},'—'),i.opts.map(o=>el('option',{value:o,selected:PR.ans[t.id+'.'+i.k]===o},o)));
+      body.append(el('label',{class:'prq'},el('span',{},L(i.label)),sel_));
+    });
+    const msg=PR.msg[t.id];
+    const fb=el('div',{class:'prfb'+(msg?(msg.ok?' ok':' no'):'')},msg?L(msg.msg):'');
+    body.append(el('div',{class:'pract'},el('button',{class:'btn pri sm',onclick:()=>{const r=t.check();PR.msg[t.id]=r;if(r.ok)PR.done[t.id]=true;prSave();PR.openId=t.id;prRender()}},L({en:'Check my work',vi:'Kiểm tra bài làm'}))),fb);
+    if(t.hint&&PR.mode!=='free')body.append(el('details',{class:'prx'},el('summary',{},L({en:'Hint',vi:'Gợi ý'})),el('p',{},L(t.hint))));
+    if(t.q)body.append(el('p',{class:'prthink'},el('b',{},L({en:'Think: ',vi:'Suy nghĩ: '})),L(t.q)));
+    if(PR.unl[PR.mode]){
+      const rv=!!PR.rev[t.id];
+      body.append(el('button',{class:'btn sm',style:'align-self:flex-start',onclick:()=>{PR.rev[t.id]=!rv;PR.openId=t.id;prRender()}},rv?L({en:'Hide answer',vi:'Ẩn đáp án'}):L({en:'Show answer',vi:'Hiện đáp án'})));
+      if(rv){
+        const box=el('div',{class:'pransw'},t.a?el('p',{},L(t.a)):null);
+        if(t.sol)box.append(el('button',{class:'btn sm',onclick:()=>prApply(t.sol)},L({en:'Load the solution line',vi:'Nạp dây chuyền đáp án'})));
+        if(t.inputs)box.append(el('p',{},L({en:'Answers: ',vi:'Đáp án: '})+t.inputs.map(i=>i.ans).join(' · ')));
+        body.append(box);
+      }
+    }
+    card.append(body);d.append(card);
+  });
+  d.append(el('button',{class:'btn sm',style:'align-self:flex-start',onclick:()=>{if(!PR.cr){PR.cr=true;prRender();return}PR.cr=false;PR.done={};PR.ans={};PR.msg={};PR.openId=null;prSave();prRender()}},PR.cr?L({en:'Click again to erase all progress',vi:'Bấm lần nữa để xóa toàn bộ tiến độ'}):L({en:'Reset progress',vi:'Đặt lại tiến độ'})));
+}
+$('#tabSb').onclick=()=>prSet(null);
+$('#tabPr').onclick=()=>prSet('guide');
+$('#tabFr').onclick=()=>prSet('free');
+prLabels();
+(()=>{const g=id=>PRTASKS.find(t=>t.id===id);
+  g('t1').sol=sol1;
+  g('t2').sol=()=>({trans:[],modules:[newMod([C_('AT',{sub:'ace'}),C_('ACP')]),newMod([C_('KS'),C_('AT',{sub:'mal'}),C_('KR'),C_('DH'),C_('ER'),C_('ACP'),R_('TE')])]});
+  g('t3').sol=PRESETS.hexa;
+  g('t4').sol=()=>{const d=PRESETS.debs();d.modules[1].domains=d.modules[1].domains.filter(x=>x.type!=='KR');return d};
+  g('t5').sol=PRESETS.nrps;
+  g('t8').sol=()=>{const f=PRESETS.fr9();f.trans[0].opts.sub='mmal';return f};
+})();
+window.__prac={prApply,PR,PRTASKS,PRFREE,prRender,prSet,mystSmi,sol1,mystLine};
+
+/* ====================================================================
+   boot
+   ==================================================================== */
+try{const saved=JSON.parse(localStorage.getItem('alsb.v1')||'null');
+  if(saved&&saved.S&&Array.isArray(saved.S.modules)){S=saved.S;lang=saved.lang==='vi'?'vi':'en';showNums=!!saved.nums;$('#cNum').checked=showNums}}catch(e){}
+if(!S.modules.length&&!S.trans.length)S=PRESETS.hexa();
+hist=[JSON.stringify({S,sel})];hi=0;
+renderPalette();applyLang();refresh();
+window.__sim={get S(){return S},set S(v){S=v},simulate,PRESETS,formulaStr,massOf,commit,refresh,structSVG,get SIM(){return SIM},newPiece,newMod,setView(v){view=v;renderViewer()}};
+})();
+</script>
+
+</body></html>
